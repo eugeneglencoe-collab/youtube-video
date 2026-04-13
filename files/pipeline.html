@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoTube — Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+<aside class="sidebar">
+  <div class="logo"><span class="logo-icon">▶</span><span class="logo-text">AutoTube</span></div>
+  <nav class="nav">
+    <a href="../index.html" class="nav-item"><span class="nav-icon">⬡</span> Dashboard</a>
+    <a href="pipeline.html" class="nav-item active"><span class="nav-icon">⟳</span> Pipeline</a>
+    <a href="videos.html" class="nav-item"><span class="nav-icon">▦</span> Vidéos</a>
+    <a href="credits.html" class="nav-item"><span class="nav-icon">◈</span> Crédits</a>
+    <a href="settings.html" class="nav-item"><span class="nav-icon">⚙</span> Config</a>
+  </nav>
+  <div class="sidebar-status"><div class="status-dot active"></div><span>Pipeline actif</span></div>
+</aside>
+<main class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1 class="page-title">Pipeline</h1>
+      <span class="page-sub">Architecture & suivi temps réel</span>
+    </div>
+  </header>
+
+  <div class="pipeline-page-grid">
+
+    <!-- ARCHITECTURE -->
+    <div class="panel">
+      <div class="panel-header"><span class="panel-title">Architecture du pipeline</span></div>
+      <div class="arch-viz" id="arch-viz">
+        <!-- Étapes visuelles -->
+        <div class="arch-step" id="arch-idea">
+          <div class="arch-step-icon">⬡</div>
+          <div class="arch-step-body">
+            <div class="arch-step-name">Script & Idée</div>
+            <div class="arch-step-service">Claude API</div>
+            <div class="arch-step-output">→ title, description, narration, imagePrompts</div>
+          </div>
+          <div class="arch-step-status" id="as-idea">—</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-split">
+          <div class="arch-step small" id="arch-voice">
+            <div class="arch-step-icon">◎</div>
+            <div class="arch-step-body">
+              <div class="arch-step-name">Voix</div>
+              <div class="arch-step-service">ElevenLabs</div>
+            </div>
+            <div class="arch-step-status" id="as-voice">—</div>
+          </div>
+          <div class="arch-step small" id="arch-images">
+            <div class="arch-step-icon">◈</div>
+            <div class="arch-step-body">
+              <div class="arch-step-name">Images</div>
+              <div class="arch-step-service">Replicate SDXL</div>
+            </div>
+            <div class="arch-step-status" id="as-images">—</div>
+          </div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-step" id="arch-edit">
+          <div class="arch-step-icon">▦</div>
+          <div class="arch-step-body">
+            <div class="arch-step-name">Assemblage</div>
+            <div class="arch-step-service">Remotion (Node.js)</div>
+            <div class="arch-step-output">→ fichier .mp4 final</div>
+          </div>
+          <div class="arch-step-status" id="as-edit">—</div>
+        </div>
+        <div class="arch-arrow">↓</div>
+        <div class="arch-step" id="arch-publish">
+          <div class="arch-step-icon">▶</div>
+          <div class="arch-step-body">
+            <div class="arch-step-name">Publication</div>
+            <div class="arch-step-service">YouTube Data API v3</div>
+            <div class="arch-step-output">→ upload + métadonnées + miniature</div>
+          </div>
+          <div class="arch-step-status" id="as-publish">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG EN DIRECT -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Log temps réel</span>
+        <span class="panel-action" onclick="clearLog()">Effacer</span>
+      </div>
+      <div class="log-box" id="log-box">
+        <div class="log-line muted">En attente du prochain pipeline…</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- NOTE REMOTION -->
+  <div class="panel info-panel" style="margin-top:16px">
+    <div class="panel-header"><span class="panel-title">⚠ Note sur l'assemblage vidéo (Remotion)</span></div>
+    <div style="padding:16px 20px;font-size:13px;color:var(--text2);line-height:1.8">
+      L'étape d'assemblage nécessite <strong style="color:var(--text)">Remotion</strong>, qui tourne en Node.js côté serveur.<br>
+      GitHub Pages est 100% statique — il ne peut pas exécuter Node.js.<br><br>
+      <strong style="color:var(--accent)">Solution recommandée :</strong> Déploie un micro-backend Remotion gratuitement sur <a href="https://render.com" target="_blank" style="color:var(--accent)">Render.com</a> ou <a href="https://railway.app" target="_blank" style="color:var(--accent)">Railway</a> (plan gratuit).<br>
+      Ce site appelle alors ton backend via une simple requête HTTP. Je peux te générer le code du backend dès que tu es prêt.
+    </div>
+  </div>
+
+</main>
+
+<style>
+.pipeline-page-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.arch-viz { padding:20px; display:flex; flex-direction:column; align-items:center; gap:0; }
+.arch-step { width:100%; background:var(--bg3); border:1px solid var(--border2); border-radius:8px; padding:14px 16px; display:flex; align-items:center; gap:14px; transition:border-color 0.2s; }
+.arch-step.running { border-color:rgba(77,166,255,0.5); background:rgba(77,166,255,0.05); }
+.arch-step.done { border-color:rgba(0,255,136,0.4); background:rgba(0,255,136,0.04); }
+.arch-step.error { border-color:rgba(255,59,85,0.4); background:rgba(255,59,85,0.05); }
+.arch-step-icon { font-size:18px; width:24px; text-align:center; flex-shrink:0; }
+.arch-step-body { flex:1; }
+.arch-step-name { font-family:var(--font-head); font-weight:700; font-size:14px; color:var(--text); }
+.arch-step-service { font-size:11px; color:var(--accent); margin-top:2px; }
+.arch-step-output { font-size:10px; color:var(--text3); margin-top:4px; font-family:var(--font-mono); }
+.arch-step-status { font-size:11px; color:var(--text3); font-family:var(--font-mono); flex-shrink:0; }
+.arch-arrow { color:var(--text3); font-size:18px; padding:6px 0; }
+.arch-split { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.arch-step.small .arch-step-name { font-size:13px; }
+
+.log-box { padding:16px; font-family:var(--font-mono); font-size:12px; height:340px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+.log-line { color:var(--text); line-height:1.5; }
+.log-line.muted { color:var(--text3); }
+.log-line.success { color:var(--accent); }
+.log-line.error { color:var(--danger); }
+.log-line.warn { color:var(--warn); }
+.log-line::before { content:attr(data-time); color:var(--text3); margin-right:10px; }
+@media (max-width:900px) { .pipeline-page-grid { grid-template-columns:1fr; } }
+</style>
+
+<script src="../js/config.js"></script>
+<script>
+const run = JSON.parse(localStorage.getItem('current_run') || 'null');
+if (run) {
+  ['idea','voice','images','edit','publish'].forEach(step => {
+    const st = run[step];
+    if (!st || st === 'idle') return;
+    const el = document.getElementById('arch-'+step);
+    if (el) el.classList.add(st);
+    const se = document.getElementById('as-'+step);
+    if (se) se.textContent = run[step+'_time'] || st;
+  });
+}
+
+// Poll toutes les 3s pour mise à jour live
+setInterval(() => {
+  const r = JSON.parse(localStorage.getItem('current_run') || 'null');
+  if (!r) return;
+  ['idea','voice','images','edit','publish'].forEach(step => {
+    const st = r[step];
+    const el = document.getElementById('arch-'+step);
+    if (el) { el.className = `arch-step${step==='voice'||step==='images'?' small':''} ${st||''}`; }
+    const se = document.getElementById('as-'+step);
+    if (se) se.textContent = r[step+'_time'] || (st||'—');
+  });
+}, 3000);
+
+function clearLog() {
+  document.getElementById('log-box').innerHTML = '<div class="log-line muted">Log effacé.</div>';
+}
+
+function addLog(msg, type='') {
+  const box = document.getElementById('log-box');
+  const t = new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const d = document.createElement('div');
+  d.className = `log-line ${type}`;
+  d.dataset.time = t;
+  d.textContent = msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+</script>
+</body>
+</html>
