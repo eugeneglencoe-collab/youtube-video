@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoTube — Config</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+<aside class="sidebar">
+  <div class="logo">
+    <span class="logo-icon">▶</span>
+    <span class="logo-text">AutoTube</span>
+  </div>
+  <nav class="nav">
+    <a href="../index.html" class="nav-item"><span class="nav-icon">⬡</span> Dashboard</a>
+    <a href="pipeline.html" class="nav-item"><span class="nav-icon">⟳</span> Pipeline</a>
+    <a href="videos.html" class="nav-item"><span class="nav-icon">▦</span> Vidéos</a>
+    <a href="credits.html" class="nav-item"><span class="nav-icon">◈</span> Crédits</a>
+    <a href="settings.html" class="nav-item active"><span class="nav-icon">⚙</span> Config</a>
+  </nav>
+  <div class="sidebar-status">
+    <div class="status-dot active"></div>
+    <span>Pipeline actif</span>
+  </div>
+</aside>
+<main class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1 class="page-title">Configuration</h1>
+      <span class="page-sub">Clés API & paramètres du pipeline</span>
+    </div>
+  </header>
+
+  <div class="settings-grid">
+
+    <!-- CLAUDE -->
+    <div class="panel settings-card">
+      <div class="panel-header">
+        <span class="panel-title">⬡ Claude API</span>
+        <span class="panel-badge" id="claude-badge">Non configuré</span>
+      </div>
+      <div class="settings-body">
+        <div class="form-group">
+          <label class="form-label">Clé API <a href="https://console.anthropic.com" target="_blank" class="form-link">Obtenir →</a></label>
+          <div class="input-row">
+            <input class="form-input" type="password" id="claude-key" placeholder="sk-ant-…" value="">
+            <button class="btn-save" onclick="saveKey('claude', 'claude-key', 'claude-badge')">Sauvegarder</button>
+          </div>
+        </div>
+        <div class="settings-info">Quota gratuit : ~$5 offert à l'inscription · ~$0.003/1k tokens</div>
+      </div>
+    </div>
+
+    <!-- ELEVENLABS -->
+    <div class="panel settings-card">
+      <div class="panel-header">
+        <span class="panel-title">◎ ElevenLabs</span>
+        <span class="panel-badge" id="eleven-badge">Non configuré</span>
+      </div>
+      <div class="settings-body">
+        <div class="form-group">
+          <label class="form-label">Clé API <a href="https://elevenlabs.io" target="_blank" class="form-link">Obtenir →</a></label>
+          <div class="input-row">
+            <input class="form-input" type="password" id="eleven-key" placeholder="…" value="">
+            <button class="btn-save" onclick="saveKey('elevenlabs', 'eleven-key', 'eleven-badge')">Sauvegarder</button>
+          </div>
+        </div>
+        <div class="settings-info">Gratuit : 10 000 chars/mois · Payant : $5/mois pour 30k chars</div>
+      </div>
+    </div>
+
+    <!-- REPLICATE -->
+    <div class="panel settings-card">
+      <div class="panel-header">
+        <span class="panel-title">◈ Replicate</span>
+        <span class="panel-badge" id="replicate-badge">Non configuré</span>
+      </div>
+      <div class="settings-body">
+        <div class="form-group">
+          <label class="form-label">Token API <a href="https://replicate.com/account" target="_blank" class="form-link">Obtenir →</a></label>
+          <div class="input-row">
+            <input class="form-input" type="password" id="replicate-key" placeholder="r8_…" value="">
+            <button class="btn-save" onclick="saveKey('replicate', 'replicate-key', 'replicate-badge')">Sauvegarder</button>
+          </div>
+        </div>
+        <div class="settings-info">Gratuit : $5 crédit offert · ~$0.002 par image SDXL</div>
+      </div>
+    </div>
+
+    <!-- YOUTUBE -->
+    <div class="panel settings-card">
+      <div class="panel-header">
+        <span class="panel-title">▶ YouTube</span>
+        <span class="panel-badge" id="yt-badge">Non configuré</span>
+      </div>
+      <div class="settings-body">
+        <div class="form-group">
+          <label class="form-label">OAuth Client ID <a href="https://console.cloud.google.com" target="_blank" class="form-link">Google Console →</a></label>
+          <div class="input-row">
+            <input class="form-input" type="text" id="yt-client-id" placeholder="xxxxx.apps.googleusercontent.com" value="">
+            <button class="btn-save" onclick="saveYTClientId()">Sauvegarder</button>
+          </div>
+        </div>
+        <div class="settings-info">Activer YouTube Data API v3 dans Google Cloud Console · Gratuit</div>
+        <div class="yt-steps">
+          <div class="yt-step">1. Va sur <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a></div>
+          <div class="yt-step">2. Crée un projet → Active "YouTube Data API v3"</div>
+          <div class="yt-step">3. Identifiants → Créer un ID client OAuth → Application Web</div>
+          <div class="yt-step">4. Ajoute ton URL GitHub Pages dans "Origines autorisées"</div>
+          <div class="yt-step">5. Colle l'ID client ici</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PARAMÈTRES VIDÉO -->
+    <div class="panel settings-card" style="grid-column: span 2">
+      <div class="panel-header">
+        <span class="panel-title">⚙ Paramètres vidéo</span>
+      </div>
+      <div class="settings-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+        <div class="form-group">
+          <label class="form-label">Visibilité par défaut</label>
+          <select class="form-input" id="default-privacy" onchange="savePref()">
+            <option value="private" selected>Privé (recommandé)</option>
+            <option value="unlisted">Non répertorié</option>
+            <option value="public">Public</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Images par vidéo</label>
+          <select class="form-input" id="default-images" onchange="savePref()">
+            <option value="4">4 images</option>
+            <option value="8" selected>8 images</option>
+            <option value="12">12 images</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Style d'image</label>
+          <input class="form-input" id="default-style" type="text" value="cinematic, high quality, 4k" oninput="savePref()">
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<style>
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.settings-card .settings-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.settings-info { font-size: 11px; color: var(--text3); line-height: 1.6; }
+.input-row { display: flex; gap: 8px; }
+.input-row .form-input { flex: 1; }
+.btn-save { background: var(--bg3); border: 1px solid var(--border2); color: var(--accent); border-radius: 8px; padding: 0 14px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.btn-save:hover { background: var(--accent-dim); border-color: rgba(0,255,136,0.4); }
+.form-link { color: var(--accent); text-decoration: none; font-size: 10px; margin-left: 8px; }
+.form-link:hover { text-decoration: underline; }
+.yt-steps { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.yt-step { font-size: 11px; color: var(--text2); line-height: 1.5; }
+.yt-step a { color: var(--accent); text-decoration: none; }
+@media (max-width: 900px) { .settings-grid { grid-template-columns: 1fr; } .settings-card[style*="span 2"] { grid-column: span 1 !important; } }
+</style>
+
+<script src="../js/config.js"></script>
+<script>
+// Pré-remplir si déjà sauvegardé
+document.addEventListener('DOMContentLoaded', () => {
+  if (localStorage.getItem('claude_api_key')) { document.getElementById('claude-key').value = '••••••••'; badge('claude-badge', true); }
+  if (localStorage.getItem('elevenlabs_api_key')) { document.getElementById('eleven-key').value = '••••••••'; badge('eleven-badge', true); }
+  if (localStorage.getItem('replicate_api_key')) { document.getElementById('replicate-key').value = '••••••••'; badge('replicate-badge', true); }
+  if (localStorage.getItem('yt_client_id')) { document.getElementById('yt-client-id').value = localStorage.getItem('yt_client_id'); badge('yt-badge', true); }
+});
+
+function badge(id, ok) {
+  const el = document.getElementById(id);
+  el.textContent = ok ? '✓ Configuré' : 'Non configuré';
+  el.className = 'panel-badge' + (ok ? ' running' : '');
+}
+
+function saveKey(service, inputId, badgeId) {
+  const val = document.getElementById(inputId).value.trim();
+  if (!val || val === '••••••••') { showToast('Saisis une clé valide', 'warn'); return; }
+  localStorage.setItem(`${service}_api_key`, val);
+  document.getElementById(inputId).value = '••••••••';
+  badge(badgeId, true);
+  showToast(`Clé ${service} sauvegardée ✓`, 'success');
+}
+
+function saveYTClientId() {
+  const val = document.getElementById('yt-client-id').value.trim();
+  if (!val) return;
+  localStorage.setItem('yt_client_id', val);
+  badge('yt-badge', true);
+  showToast('Client ID YouTube sauvegardé ✓', 'success');
+}
+
+function savePref() {
+  CONFIG.defaults.uploadPrivacy = document.getElementById('default-privacy').value;
+  CONFIG.defaults.imagesPerVideo = parseInt(document.getElementById('default-images').value);
+  CONFIG.defaults.imageStyle = document.getElementById('default-style').value;
+  localStorage.setItem('autotube_prefs', JSON.stringify(CONFIG.defaults));
+}
+
+let toastContainer = null;
+function showToast(msg, type = 'info') {
+  if (!toastContainer) { toastContainer = document.createElement('div'); toastContainer.className = 'toast-container'; document.body.appendChild(toastContainer); }
+  const icons = { success:'✓', warn:'⚠', error:'✕', info:'ℹ' };
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span style="color:var(--${type==='success'?'accent':type==='warn'?'warn':'danger'})">${icons[type]}</span> ${msg}`;
+  toastContainer.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+</script>
+</body>
+</html>
