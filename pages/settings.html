@@ -117,6 +117,24 @@
       </div>
     </div>
 
+    <!-- BACKEND REMOTION -->
+    <div class="panel settings-card" style="grid-column: span 2">
+      <div class="panel-header">
+        <span class="panel-title">▦ Backend Remotion</span>
+        <span class="panel-badge" id="backend-badge">Non configuré</span>
+      </div>
+      <div class="settings-body">
+        <div class="form-group">
+          <label class="form-label">URL du backend Render.com</label>
+          <div class="input-row">
+            <input class="form-input" type="text" id="backend-url" placeholder="https://server-f28i.onrender.com">
+            <button class="btn-save" onclick="saveBackendUrl()">Sauvegarder</button>
+          </div>
+        </div>
+        <div class="settings-info">Ton backend Remotion déployé sur Render.com — nécessaire pour l'assemblage vidéo</div>
+      </div>
+    </div>
+
     <!-- PARAMÈTRES VIDÉO -->
     <div class="panel settings-card" style="grid-column: span 2">
       <div class="panel-header">
@@ -167,12 +185,12 @@
 
 <script src="../js/config.js"></script>
 <script>
-// Pré-remplir si déjà sauvegardé
 document.addEventListener('DOMContentLoaded', () => {
-  if (localStorage.getItem('claude_api_key')) { document.getElementById('claude-key').value = '••••••••'; badge('claude-badge', true); }
-  if (localStorage.getItem('elevenlabs_api_key')) { document.getElementById('eleven-key').value = '••••••••'; badge('eleven-badge', true); }
-  if (localStorage.getItem('replicate_api_key')) { document.getElementById('replicate-key').value = '••••••••'; badge('replicate-badge', true); }
-  if (localStorage.getItem('yt_client_id')) { document.getElementById('yt-client-id').value = localStorage.getItem('yt_client_id'); badge('yt-badge', true); }
+  if (localStorage.getItem('claude_api_key'))      { document.getElementById('claude-key').value = '••••••••'; badge('claude-badge', true); }
+  if (localStorage.getItem('elevenlabs_api_key'))  { document.getElementById('eleven-key').value = '••••••••'; badge('eleven-badge', true); }
+  if (localStorage.getItem('replicate_api_key'))   { document.getElementById('replicate-key').value = '••••••••'; badge('replicate-badge', true); }
+  if (localStorage.getItem('yt_client_id'))        { document.getElementById('yt-client-id').value = localStorage.getItem('yt_client_id'); badge('yt-badge', true); }
+  if (localStorage.getItem('remotion_backend_url')) { document.getElementById('backend-url').value = localStorage.getItem('remotion_backend_url'); badge('backend-badge', true); }
 });
 
 function badge(id, ok) {
@@ -198,10 +216,18 @@ function saveYTClientId() {
   showToast('Client ID YouTube sauvegardé ✓', 'success');
 }
 
+function saveBackendUrl() {
+  const val = document.getElementById('backend-url').value.trim();
+  if (!val) return;
+  localStorage.setItem('remotion_backend_url', val);
+  badge('backend-badge', true);
+  showToast('Backend URL sauvegardée ✓', 'success');
+}
+
 function savePref() {
-  CONFIG.defaults.uploadPrivacy = document.getElementById('default-privacy').value;
+  CONFIG.defaults.uploadPrivacy  = document.getElementById('default-privacy').value;
   CONFIG.defaults.imagesPerVideo = parseInt(document.getElementById('default-images').value);
-  CONFIG.defaults.imageStyle = document.getElementById('default-style').value;
+  CONFIG.defaults.imageStyle     = document.getElementById('default-style').value;
   localStorage.setItem('autotube_prefs', JSON.stringify(CONFIG.defaults));
 }
 
@@ -209,9 +235,10 @@ let toastContainer = null;
 function showToast(msg, type = 'info') {
   if (!toastContainer) { toastContainer = document.createElement('div'); toastContainer.className = 'toast-container'; document.body.appendChild(toastContainer); }
   const icons = { success:'✓', warn:'⚠', error:'✕', info:'ℹ' };
+  const colorMap = { success:'var(--accent)', warn:'var(--warn)', error:'var(--danger)', info:'var(--info)' };
   const t = document.createElement('div');
   t.className = `toast ${type}`;
-  t.innerHTML = `<span style="color:var(--${type==='success'?'accent':type==='warn'?'warn':'danger'})">${icons[type]}</span> ${msg}`;
+  t.innerHTML = `<span style="color:${colorMap[type]}">${icons[type]}</span> ${msg}`;
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 3500);
 }
