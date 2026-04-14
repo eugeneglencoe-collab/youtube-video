@@ -1,6 +1,11 @@
 // ============================================================
 //  DASHBOARD — AutoTube
+//  v1.1 — Intégration backend Remotion réelle
 // ============================================================
+
+// ── BACKEND REMOTION ───────────────────────────────────────
+// ⚠ Remplace cette URL par ton URL Render.com après déploiement
+const REMOTION_BACKEND = localStorage.getItem('remotion_backend_url') || 'http://localhost:3001';
 
 // ── STATE ──────────────────────────────────────────────────
 const STATE = {
@@ -8,7 +13,7 @@ const STATE = {
   credits: JSON.parse(localStorage.getItem('autotube_credits') || 'null') || {
     claude:      { used: 0, total: 500000, unit: 'tokens' },
     elevenlabs:  { used: 0, total: 10000,  unit: 'chars' },
-    replicate:   { used: 0, total: 5000,   unit: 'cents' }, // $50 = 5000 cents
+    replicate:   { used: 0, total: 5000,   unit: 'cents' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
   ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
@@ -29,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderVideos();
   renderYouTube();
   checkConfigAlerts();
+  handleOAuthRedirect();
 });
 
 // ── KPIs ───────────────────────────────────────────────────
@@ -42,23 +48,19 @@ function renderKPIs() {
   set('kpi-views', totalViews > 1000 ? (totalViews/1000).toFixed(1)+'k' : totalViews || '0');
   set('kpi-cost', published > 0 ? `$${avgCost}` : '—');
 
-  // Crédits globaux : % moyen restant
   const pcts = Object.values(STATE.credits).map(c => 100 - (c.used/c.total*100));
   const avgPct = Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length);
   set('kpi-credits', `${avgPct}%`);
 
   if (avgPct < CONFIG.alerts.dangerThreshold) {
-    document.querySelector('.kpi-card.accent').style.borderColor = 'rgba(255,59,85,0.4)';
+    const card = document.querySelector('.kpi-card.accent');
+    if (card) card.style.borderColor = 'rgba(255,59,85,0.4)';
     set('kpi-credits-delta', '⚠ Crédits critiques');
   } else if (avgPct < CONFIG.alerts.warnThreshold) {
     set('kpi-credits-delta', '⚠ Recharger bientôt');
   }
 
-  // Delta vidéos cette semaine
-  const week = STATE.videos.filter(v => {
-    const d = new Date(v.date);
-    return (Date.now() - d) < 7*24*3600*1000;
-  }).length;
+  const week = STATE.videos.filter(v => (Date.now() - new Date(v.date)) < 7*24*3600*1000).length;
   set('kpi-pub-delta', week > 0 ? `+${week} cette semaine` : 'Aucune cette semaine');
 
   if (STATE.ytData) {
@@ -78,9 +80,9 @@ function renderCredits() {
   };
 
   const html = Object.entries(STATE.credits).map(([key, c]) => {
-    const pct  = Math.max(0, 100 - (c.used / c.total * 100));
-    const cls  = pct < CONFIG.alerts.dangerThreshold ? 'danger'
-               : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
+    const pct = Math.max(0, 100 - (c.used / c.total * 100));
+    const cls = pct < CONFIG.alerts.dangerThreshold ? 'danger'
+              : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
     const remaining = c.unit === 'cents'
       ? `$${((c.total - c.used)/100).toFixed(2)} restant`
       : `${(c.total - c.used).toLocaleString()} ${c.unit} restant`;
@@ -102,8 +104,6 @@ function renderCredits() {
 
 async function refreshCredits() {
   showToast('Actualisation des crédits…', 'info');
-
-  // ElevenLabs — API publique pour le quota
   if (CONFIG.elevenlabs.apiKey) {
     try {
       const r = await fetch('https://api.elevenlabs.io/v1/user', {
@@ -116,7 +116,6 @@ async function refreshCredits() {
       }
     } catch(e) { console.warn('ElevenLabs quota:', e); }
   }
-
   saveState();
   renderCredits();
   renderKPIs();
@@ -125,17 +124,17 @@ async function refreshCredits() {
 
 // ── PIPELINE STEPS ─────────────────────────────────────────
 const PIPELINE_STEPS_DEF = [
-  { id: 'idea',    name: 'Génération du script',   icon: '⬡', detail: 'Claude API' },
-  { id: 'voice',   name: 'Synthèse vocale',         icon: '◎', detail: 'ElevenLabs' },
-  { id: 'images',  name: "Génération d'images",     icon: '◈', detail: 'Replicate / SDXL' },
-  { id: 'edit',    name: 'Assemblage vidéo',         icon: '▦', detail: 'Remotion' },
-  { id: 'publish', name: 'Publication YouTube',     icon: '▶', detail: 'YouTube Data API v3' },
+  { id: 'idea',    name: 'Génération du script',  icon: '⬡', detail: 'Claude API' },
+  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'ElevenLabs' },
+  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Replicate / SDXL' },
+  { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion (backend)' },
+  { id: 'publish', name: 'Publication YouTube',    icon: '▶', detail: 'YouTube Data API v3' },
 ];
 
 function renderPipelineSteps(runData) {
   const steps = runData || STATE.currentRun;
   const html = PIPELINE_STEPS_DEF.map(s => {
-    const st = steps ? steps[s.id] : 'idle';
+    const st  = steps ? steps[s.id] : 'idle';
     const cls = st === 'done' ? 'done' : st === 'running' ? 'running' : st === 'error' ? 'error' : '';
     const ico = st === 'done' ? '✓' : st === 'running' ? '…' : st === 'error' ? '✕' : s.icon;
     const detail = steps && steps[s.id+'_detail'] ? steps[s.id+'_detail'] : s.detail;
@@ -151,19 +150,15 @@ function renderPipelineSteps(runData) {
   }).join('');
   document.getElementById('pipeline-steps').innerHTML = html;
 
-  // Badge
+  const badge = document.getElementById('pipeline-status-badge');
   if (!steps) {
-    document.getElementById('pipeline-status-badge').textContent = 'En attente';
-    document.getElementById('pipeline-status-badge').className = 'panel-badge';
+    badge.textContent = 'En attente'; badge.className = 'panel-badge';
   } else if (Object.values(steps).includes('running')) {
-    document.getElementById('pipeline-status-badge').textContent = 'En cours';
-    document.getElementById('pipeline-status-badge').className = 'panel-badge running';
+    badge.textContent = 'En cours'; badge.className = 'panel-badge running';
   } else if (Object.values(steps).includes('error')) {
-    document.getElementById('pipeline-status-badge').textContent = 'Erreur';
-    document.getElementById('pipeline-status-badge').className = 'panel-badge error';
+    badge.textContent = 'Erreur'; badge.className = 'panel-badge error';
   } else {
-    document.getElementById('pipeline-status-badge').textContent = 'Terminé';
-    document.getElementById('pipeline-status-badge').className = 'panel-badge running';
+    badge.textContent = 'Terminé'; badge.className = 'panel-badge running';
   }
 }
 
@@ -176,14 +171,11 @@ function renderVideos() {
       </div>`;
     return;
   }
-
+  const statusLabel = { published:'Publié', processing:'En cours', error:'Erreur', draft:'Brouillon' };
   const html = STATE.videos.slice(0,6).map(v => {
-    const statusLabel = { published:'Publié', processing:'En cours', error:'Erreur', draft:'Brouillon' };
     const date = new Date(v.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
     return `<div class="video-item" onclick="openVideo('${v.id}')">
-      <div class="video-thumb">
-        ${v.thumb ? `<img src="${v.thumb}" alt="">` : '▶'}
-      </div>
+      <div class="video-thumb">${v.thumb ? `<img src="${v.thumb}" alt="">` : '▶'}</div>
       <div class="video-info">
         <div class="video-title">${v.title || 'Sans titre'}</div>
         <div class="video-meta">${date} · ${v.views||0} vues · $${(v.cost||0).toFixed(3)}</div>
@@ -191,16 +183,12 @@ function renderVideos() {
       <span class="video-status ${v.status}">${statusLabel[v.status]||v.status}</span>
     </div>`;
   }).join('');
-
   document.getElementById('videos-list').innerHTML = html;
 }
 
 function openVideo(id) {
   const v = STATE.videos.find(x => x.id === id);
-  if (!v) return;
-  if (v.youtubeId) {
-    window.open(`https://studio.youtube.com/video/${v.youtubeId}/edit`, '_blank');
-  }
+  if (v && v.youtubeId) window.open(`https://studio.youtube.com/video/${v.youtubeId}/edit`, '_blank');
 }
 
 // ── YOUTUBE ────────────────────────────────────────────────
@@ -249,7 +237,6 @@ async function connectYoutube() {
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-// Gestion du redirect OAuth (token dans l'URL)
 function handleOAuthRedirect() {
   const hash = window.location.hash;
   if (!hash) return;
@@ -272,20 +259,13 @@ async function fetchYouTubeStats(token) {
     const data = await r.json();
     if (data.items && data.items[0]) {
       const ch = data.items[0];
-      STATE.ytData = {
-        title: ch.snippet.title,
-        ...ch.statistics,
-      };
+      STATE.ytData = { title: ch.snippet.title, ...ch.statistics };
       localStorage.setItem('yt_data', JSON.stringify(STATE.ytData));
       renderYouTube();
       renderKPIs();
     }
-  } catch(e) {
-    showToast('Erreur chargement YouTube', 'error');
-  }
+  } catch(e) { showToast('Erreur chargement YouTube', 'error'); }
 }
-
-handleOAuthRedirect();
 
 // ── LAUNCH MODAL ───────────────────────────────────────────
 function openLaunch() {
@@ -297,6 +277,7 @@ function openLaunch() {
   }
   document.getElementById('launch-modal').classList.add('open');
 }
+
 function closeLaunch(e) {
   if (!e || e.target === document.getElementById('launch-modal')) {
     document.getElementById('launch-modal').classList.remove('open');
@@ -315,11 +296,7 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suivi dans le dashboard…', 'success');
 
   const runId = Date.now().toString();
-  const run = {
-    id: runId,
-    topic, voice, duration, tags,
-    idea: 'running', idea_detail: 'Appel Claude API…',
-  };
+  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Appel Claude API…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
@@ -327,36 +304,37 @@ async function launchPipeline() {
   try {
     // ÉTAPE 1 — Script via Claude
     const script = await generateScript(topic, tags, duration);
-    updateRun(run, 'idea', 'done', `Script généré (${script.title.slice(0,30)}…)`);
+    updateRun(run, 'idea', 'done', `Script : "${script.title.slice(0,30)}…"`);
     updateRun(run, 'voice', 'running', 'ElevenLabs en cours…');
 
     // ÉTAPE 2 — Voix via ElevenLabs
     const audioBlob = await generateVoice(script.narration, voice);
+    const audioUrl  = URL.createObjectURL(audioBlob); // URL temporaire en mémoire
     updateRun(run, 'voice', 'done', `Audio ${Math.round(audioBlob.size/1024)} KB`);
     updateRun(run, 'images', 'running', 'Replicate SDXL…');
 
     // ÉTAPE 3 — Images via Replicate
-    const images = await generateImages(script.imagePrompts);
-    updateRun(run, 'images', 'done', `${images.length} images générées`);
-    updateRun(run, 'edit', 'running', 'Assemblage…');
+    const imageUrls = await generateImages(script.imagePrompts);
+    updateRun(run, 'images', 'done', `${imageUrls.length} images générées`);
+    updateRun(run, 'edit', 'running', 'Envoi vers backend Remotion…');
 
-    // ÉTAPE 4 — Assemblage (placeholder — Remotion nécessite Node.js)
-    await simulateAssembly();
-    updateRun(run, 'edit', 'done', 'Vidéo assemblée');
+    // ÉTAPE 4 — Assemblage via backend Remotion
+    const durationSec = duration.includes('Short') ? 90 : duration.includes('5') ? 360 : 720;
+    const mp4Url = await assembleWithRemotion({ runId, audioUrl, imageUrls, script, durationSec });
+    updateRun(run, 'edit', 'done', 'Vidéo assemblée ✓');
     updateRun(run, 'publish', 'running', 'Upload YouTube…');
 
     // ÉTAPE 5 — Publication YouTube
-    const ytResult = await publishToYouTube(script, tags);
-    updateRun(run, 'publish', 'done', `Publié : ${ytResult.id}`);
+    const ytResult = await publishToYouTube(script, tags, mp4Url);
+    updateRun(run, 'publish', 'done', `Publié : ${ytResult.id || 'draft'}`);
 
-    // Enregistrement
     const videoEntry = {
       id: runId,
       title: script.title,
       description: script.description,
       date: new Date().toISOString(),
-      status: 'published',
-      youtubeId: ytResult.id,
+      status: ytResult.id ? 'published' : 'draft',
+      youtubeId: ytResult.id || null,
       views: 0,
       cost: estimateCost(script),
     };
@@ -364,27 +342,69 @@ async function launchPipeline() {
     saveState();
     renderVideos();
     renderKPIs();
-    showToast(`Vidéo publiée ! "${script.title}"`, 'success');
+    showToast(`🎉 Vidéo prête : "${script.title}"`, 'success');
 
   } catch(err) {
-    const failedStep = Object.keys(run).find(k => run[k] === 'running') || 'publish';
-    updateRun(run, failedStep.replace('_detail',''), 'error', err.message);
+    const failedStep = PIPELINE_STEPS_DEF.find(s => run[s.id] === 'running');
+    if (failedStep) updateRun(run, failedStep.id, 'error', err.message);
     showToast(`Erreur : ${err.message}`, 'error');
     console.error(err);
   }
 }
 
-function updateRun(run, step, status, detail) {
-  run[step] = status;
-  run[step+'_detail'] = detail;
-  run[step+'_time'] = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
-  STATE.currentRun = run;
-  localStorage.setItem('current_run', JSON.stringify(run));
-  renderPipelineSteps(run);
+// ── ASSEMBLAGE REMOTION ────────────────────────────────────
+async function assembleWithRemotion({ runId, audioUrl, imageUrls, script, durationSec }) {
+  const backendUrl = localStorage.getItem('remotion_backend_url') || REMOTION_BACKEND;
+
+  // Vérifier que le backend est dispo
+  let healthOk = false;
+  try {
+    const hCheck = await fetch(`${backendUrl}/health`, { signal: AbortSignal.timeout(5000) });
+    healthOk = hCheck.ok;
+  } catch(e) { /* backend indisponible */ }
+
+  if (!healthOk) {
+    // Mode dégradé : skip assemblage, on crée juste un draft sans vidéo
+    showToast('⚠ Backend Remotion non configuré — vidéo créée en mode draft', 'warn');
+    await sleep(800);
+    return null; // pas de mp4, on publie quand même les métadonnées
+  }
+
+  // Lancer le rendu
+  const r = await fetch(`${backendUrl}/render`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jobId: runId,
+      audioUrl,
+      imageUrls,
+      script: script.narration,
+      title: script.title,
+      durationSec,
+      fps: 30,
+    }),
+  });
+  if (!r.ok) throw new Error(`Remotion backend : ${r.status}`);
+
+  // Polling jusqu'à complétion (max 15 min)
+  const maxWait = 900000;
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    await sleep(3000);
+    const status = await fetch(`${backendUrl}/status/${runId}`).then(r => r.json());
+    updateRun(STATE.currentRun, 'edit', 'running', `Assemblage ${status.progress||0}%…`);
+
+    if (status.status === 'done') {
+      return `${backendUrl}/download/${runId}`; // URL de téléchargement du .mp4
+    }
+    if (status.status === 'error') {
+      throw new Error(`Remotion : ${status.error}`);
+    }
+  }
+  throw new Error('Remotion timeout (>15 min)');
 }
 
 // ── API CALLS ──────────────────────────────────────────────
-
 async function generateScript(topic, tags, duration) {
   const prompt = `Tu es un expert en création de contenu YouTube francophone.
 
@@ -425,8 +445,7 @@ Réponds UNIQUEMENT en JSON valide avec cette structure :
   const text = data.content[0].text;
   const clean = text.replace(/```json|```/g, '').trim();
 
-  // Mise à jour crédits Claude
-  STATE.credits.claude.used += data.usage?.input_tokens + data.usage?.output_tokens || 1500;
+  STATE.credits.claude.used += (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
   saveState();
   renderCredits();
 
@@ -437,20 +456,15 @@ async function generateVoice(text, voiceName) {
   const voiceId = CONFIG.elevenlabs.voices[voiceName] || CONFIG.elevenlabs.voices['Neutre (Adam)'];
   const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: 'POST',
-    headers: {
-      'xi-api-key': CONFIG.elevenlabs.apiKey,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'xi-api-key': CONFIG.elevenlabs.apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      text: text,
+      text,
       model_id: 'eleven_multilingual_v2',
       voice_settings: { stability: 0.5, similarity_boost: 0.75 },
     }),
   });
-
   if (!resp.ok) throw new Error(`ElevenLabs : ${resp.status}`);
 
-  // Mise à jour crédits
   STATE.credits.elevenlabs.used += text.length;
   checkCreditAlerts();
   saveState();
@@ -464,26 +478,17 @@ async function generateImages(prompts) {
   for (const prompt of prompts.slice(0, CONFIG.defaults.imagesPerVideo)) {
     const resp = await fetch('https://api.replicate.com/v1/predictions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Token ${CONFIG.replicate.apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Token ${CONFIG.replicate.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         version: CONFIG.replicate.model.split(':')[1],
-        input: {
-          prompt: `${prompt}, ${CONFIG.defaults.imageStyle}`,
-          width: 1280, height: 720,
-        },
+        input: { prompt: `${prompt}, ${CONFIG.defaults.imageStyle}`, width: 1280, height: 720 },
       }),
     });
     if (!resp.ok) throw new Error(`Replicate : ${resp.status}`);
     const pred = await resp.json();
-
-    // Poll jusqu'à complétion
     const url = await pollReplicate(pred.id);
     results.push(url);
-
-    STATE.credits.replicate.used += 2; // ~$0.02 par image
+    STATE.credits.replicate.used += 2;
     saveState();
     renderCredits();
   }
@@ -502,19 +507,10 @@ async function pollReplicate(predId, tries = 0) {
   return pollReplicate(predId, tries + 1);
 }
 
-async function simulateAssembly() {
-  // Remotion nécessite un environnement Node.js local ou un serveur.
-  // Ici on simule l'étape — à connecter à ton backend Remotion.
-  await sleep(1500);
-}
-
-async function publishToYouTube(script, tags) {
+async function publishToYouTube(script, tags, mp4Url) {
   const token = localStorage.getItem('yt_access_token');
   if (!token) throw new Error('YouTube non connecté');
 
-  // NOTE : l'upload vidéo réel nécessite un fichier .mp4.
-  // Ici on crée la fiche (titre, description, tags) avec une vidéo placeholder.
-  // En production, connecte Remotion output ici.
   const meta = {
     snippet: {
       title: script.title,
@@ -526,18 +522,48 @@ async function publishToYouTube(script, tags) {
     status: { privacyStatus: CONFIG.defaults.uploadPrivacy },
   };
 
+  // Si on a un mp4 (via Remotion), on fait un vrai upload multipart
+  if (mp4Url) {
+    // Télécharger le mp4 depuis le backend
+    const videoResp = await fetch(mp4Url);
+    if (!videoResp.ok) throw new Error('Impossible de récupérer le .mp4 depuis le backend');
+    const videoBlob = await videoResp.blob();
+
+    // Upload resumable YouTube
+    const initResp = await fetch(
+      'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-Upload-Content-Type': 'video/mp4',
+          'X-Upload-Content-Length': videoBlob.size,
+        },
+        body: JSON.stringify(meta),
+      }
+    );
+    if (!initResp.ok) throw new Error(`YouTube init upload : ${initResp.status}`);
+    const uploadUrl = initResp.headers.get('Location');
+
+    const uploadResp = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'video/mp4' },
+      body: videoBlob,
+    });
+    if (!uploadResp.ok) throw new Error(`YouTube upload : ${uploadResp.status}`);
+    return await uploadResp.json();
+  }
+
+  // Mode dégradé sans vidéo : création de la fiche vide
   const r = await fetch(
     'https://www.googleapis.com/youtube/v3/videos?part=snippet,status',
     {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(meta),
     }
   );
-
   if (!r.ok) {
     const e = await r.json();
     throw new Error(`YouTube : ${e.error?.message || r.status}`);
@@ -560,7 +586,7 @@ function checkCreditAlerts() {
 function checkConfigAlerts() {
   const missing = checkConfig();
   if (missing.length > 0) {
-    showToast(`Clés manquantes : ${missing.join(', ')} → va dans Config`, 'warn');
+    showToast(`Clés manquantes : ${missing.join(', ')} → Config`, 'warn');
   }
 }
 
@@ -568,9 +594,9 @@ function checkConfigAlerts() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function estimateCost(script) {
-  const tokenCost  = ((STATE.credits.claude.used / 1000) * 0.003);
-  const voiceCost  = ((script.narration.length / 1000) * 0.03);
-  const imageCost  = ((CONFIG.defaults.imagesPerVideo) * 0.002);
+  const tokenCost = ((STATE.credits.claude.used / 1000) * 0.003);
+  const voiceCost = ((script.narration.length / 1000) * 0.03);
+  const imageCost = (CONFIG.defaults.imagesPerVideo * 0.002);
   return parseFloat((tokenCost + voiceCost + imageCost).toFixed(4));
 }
 
@@ -588,9 +614,19 @@ function showToast(msg, type = 'info') {
     document.body.appendChild(toastContainer);
   }
   const icons = { success:'✓', warn:'⚠', error:'✕', info:'ℹ' };
+  const colorMap = { info:'var(--info)', success:'var(--accent)', warn:'var(--warn)', error:'var(--danger)' };
   const t = document.createElement('div');
   t.className = `toast ${type}`;
-  t.innerHTML = `<span style="color:var(--${type==='info'?'info':type==='success'?'accent':type==='warn'?'warn':'danger'})">${icons[type]}</span> ${msg}`;
+  t.innerHTML = `<span style="color:${colorMap[type]}">${icons[type]}</span> ${msg}`;
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 4000);
+}
+
+function updateRun(run, step, status, detail) {
+  run[step] = status;
+  run[step+'_detail'] = detail;
+  run[step+'_time'] = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+  STATE.currentRun = run;
+  localStorage.setItem('current_run', JSON.stringify(run));
+  renderPipelineSteps(run);
 }
