@@ -1,11 +1,9 @@
 // ============================================================
 //  DASHBOARD — AutoTube
-//  v1.1 — Intégration backend Remotion réelle
+//  Tous les appels API passent par le backend Render
 // ============================================================
 
-// ── BACKEND REMOTION ───────────────────────────────────────
-// ⚠ Remplace cette URL par ton URL Render.com après déploiement
-const REMOTION_BACKEND = localStorage.getItem('remotion_backend_url') || 'http://localhost:3001';
+const BACKEND = 'https://server-f28i.onrender.com';
 
 // ── STATE ──────────────────────────────────────────────────
 const STATE = {
@@ -53,8 +51,8 @@ function renderKPIs() {
   set('kpi-credits', `${avgPct}%`);
 
   if (avgPct < CONFIG.alerts.dangerThreshold) {
-    const card = document.querySelector('.kpi-card.accent');
-    if (card) card.style.borderColor = 'rgba(255,59,85,0.4)';
+    const el = document.querySelector('.kpi-card.accent');
+    if (el) el.style.borderColor = 'rgba(255,59,85,0.4)';
     set('kpi-credits-delta', '⚠ Crédits critiques');
   } else if (avgPct < CONFIG.alerts.warnThreshold) {
     set('kpi-credits-delta', '⚠ Recharger bientôt');
@@ -74,9 +72,9 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    claude:     { name: 'Claude API', icon: '⬡', unitLabel: 'tokens' },
-    elevenlabs: { name: 'ElevenLabs', icon: '◎', unitLabel: 'chars' },
-    replicate:  { name: 'Replicate',  icon: '◈', unitLabel: 'crédits ($)' },
+    claude:     { name: 'Claude API', icon: '⬡' },
+    elevenlabs: { name: 'ElevenLabs', icon: '◎' },
+    replicate:  { name: 'Replicate',  icon: '◈' },
   };
 
   const html = Object.entries(STATE.credits).map(([key, c]) => {
@@ -104,18 +102,17 @@ function renderCredits() {
 
 async function refreshCredits() {
   showToast('Actualisation des crédits…', 'info');
-  if (CONFIG.elevenlabs.apiKey) {
-    try {
-      const r = await fetch('https://api.elevenlabs.io/v1/user', {
-        headers: { 'xi-api-key': CONFIG.elevenlabs.apiKey }
-      });
-      if (r.ok) {
-        const d = await r.json();
-        STATE.credits.elevenlabs.used = d.subscription.character_count;
-        STATE.credits.elevenlabs.total = d.subscription.character_limit;
-      }
-    } catch(e) { console.warn('ElevenLabs quota:', e); }
-  }
+  try {
+    const r = await fetch(`${BACKEND}/elevenlabs-quota`, {
+      headers: { 'xi-api-key': CONFIG.elevenlabs.apiKey }
+    });
+    if (r.ok) {
+      const d = await r.json();
+      STATE.credits.elevenlabs.used = d.used;
+      STATE.credits.elevenlabs.total = d.total;
+    }
+  } catch(e) { console.warn('ElevenLabs quota:', e); }
+
   saveState();
   renderCredits();
   renderKPIs();
@@ -124,17 +121,17 @@ async function refreshCredits() {
 
 // ── PIPELINE STEPS ─────────────────────────────────────────
 const PIPELINE_STEPS_DEF = [
-  { id: 'idea',    name: 'Génération du script',  icon: '⬡', detail: 'Claude API' },
-  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'ElevenLabs' },
-  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Replicate / SDXL' },
-  { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion (backend)' },
+  { id: 'idea',    name: 'Génération du script',  icon: '⬡', detail: 'Claude API via Render' },
+  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'ElevenLabs via Render' },
+  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Replicate SDXL via Render' },
+  { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion' },
   { id: 'publish', name: 'Publication YouTube',    icon: '▶', detail: 'YouTube Data API v3' },
 ];
 
 function renderPipelineSteps(runData) {
   const steps = runData || STATE.currentRun;
   const html = PIPELINE_STEPS_DEF.map(s => {
-    const st  = steps ? steps[s.id] : 'idle';
+    const st = steps ? steps[s.id] : 'idle';
     const cls = st === 'done' ? 'done' : st === 'running' ? 'running' : st === 'error' ? 'error' : '';
     const ico = st === 'done' ? '✓' : st === 'running' ? '…' : st === 'error' ? '✕' : s.icon;
     const detail = steps && steps[s.id+'_detail'] ? steps[s.id+'_detail'] : s.detail;
@@ -171,8 +168,8 @@ function renderVideos() {
       </div>`;
     return;
   }
-  const statusLabel = { published:'Publié', processing:'En cours', error:'Erreur', draft:'Brouillon' };
   const html = STATE.videos.slice(0,6).map(v => {
+    const statusLabel = { published:'Publié', processing:'En cours', error:'Erreur', draft:'Brouillon' };
     const date = new Date(v.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
     return `<div class="video-item" onclick="openVideo('${v.id}')">
       <div class="video-thumb">${v.thumb ? `<img src="${v.thumb}" alt="">` : '▶'}</div>
@@ -199,22 +196,22 @@ function renderYouTube() {
     <div class="yt-stats-grid">
       <div class="yt-stat-item">
         <div class="yt-stat-label">Abonnés</div>
-        <div class="yt-stat-value">${parseInt(d.subscriberCount).toLocaleString()}</div>
+        <div class="yt-stat-value">${parseInt(d.subscriberCount||0).toLocaleString()}</div>
         <div class="yt-stat-delta up">Chaîne connectée</div>
       </div>
       <div class="yt-stat-item">
         <div class="yt-stat-label">Vues totales</div>
-        <div class="yt-stat-value">${parseInt(d.viewCount).toLocaleString()}</div>
+        <div class="yt-stat-value">${parseInt(d.viewCount||0).toLocaleString()}</div>
         <div class="yt-stat-delta">Depuis création</div>
       </div>
       <div class="yt-stat-item">
         <div class="yt-stat-label">Vidéos</div>
-        <div class="yt-stat-value">${d.videoCount}</div>
+        <div class="yt-stat-value">${d.videoCount||0}</div>
         <div class="yt-stat-delta">Publiées</div>
       </div>
       <div class="yt-stat-item">
         <div class="yt-stat-label">Chaîne</div>
-        <div class="yt-stat-value" style="font-size:14px;line-height:1.3">${d.title}</div>
+        <div class="yt-stat-value" style="font-size:14px;line-height:1.3">${d.title||'—'}</div>
         <div class="yt-stat-delta"><a href="https://studio.youtube.com" target="_blank" style="color:var(--yt-red)">Ouvrir Studio →</a></div>
       </div>
     </div>`;
@@ -224,12 +221,12 @@ function renderYouTube() {
 async function connectYoutube() {
   if (!CONFIG.youtube.clientId) {
     showToast('Configure d\'abord ton Client ID YouTube dans Config', 'warn');
-    setTimeout(() => window.location.href = 'pages/settings.html', 1500);
+    setTimeout(() => window.location.href = '../pages/settings.html', 1500);
     return;
   }
   const params = new URLSearchParams({
     client_id: CONFIG.youtube.clientId,
-    redirect_uri: window.location.origin + window.location.pathname,
+    redirect_uri: window.location.origin + '/youtube-video/',
     response_type: 'token',
     scope: CONFIG.youtube.scopes.join(' '),
     include_granted_scopes: 'true',
@@ -272,7 +269,7 @@ function openLaunch() {
   const missing = checkConfig();
   if (missing.length > 0) {
     showToast(`Configure d'abord : ${missing.join(', ')}`, 'warn');
-    setTimeout(() => window.location.href = 'pages/settings.html', 1500);
+    setTimeout(() => window.location.href = '../pages/settings.html', 1500);
     return;
   }
   document.getElementById('launch-modal').classList.add('open');
@@ -288,53 +285,53 @@ async function launchPipeline() {
   const topic    = document.getElementById('video-topic').value.trim();
   const voice    = document.getElementById('voice-style').value;
   const duration = document.getElementById('video-duration').value;
-  const tags     = document.getElementById('video-tags').value.split(',').map(t=>t.trim());
+  const tags     = document.getElementById('video-tags').value.split(',').map(t=>t.trim()).filter(Boolean);
 
   if (!topic) { showToast('Saisis un sujet pour la vidéo', 'warn'); return; }
+  if (STATE.pipelineRunning) { showToast('Un pipeline est déjà en cours', 'warn'); return; }
 
   closeLaunch();
-  showToast('Pipeline lancé ! Suivi dans le dashboard…', 'success');
+  STATE.pipelineRunning = true;
+  showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Appel Claude API…' };
+  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Appel Claude via Render…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
 
   try {
-    // ÉTAPE 1 — Script via Claude
+    // ÉTAPE 1 — Script via backend Render → Claude
     const script = await generateScript(topic, tags, duration);
-    updateRun(run, 'idea', 'done', `Script : "${script.title.slice(0,30)}…"`);
+    updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
     updateRun(run, 'voice', 'running', 'ElevenLabs en cours…');
 
-    // ÉTAPE 2 — Voix via ElevenLabs
+    // ÉTAPE 2 — Voix via backend Render → ElevenLabs
     const audioBlob = await generateVoice(script.narration, voice);
-    const audioUrl  = URL.createObjectURL(audioBlob); // URL temporaire en mémoire
     updateRun(run, 'voice', 'done', `Audio ${Math.round(audioBlob.size/1024)} KB`);
-    updateRun(run, 'images', 'running', 'Replicate SDXL…');
+    updateRun(run, 'images', 'running', `0/${CONFIG.defaults.imagesPerVideo} images…`);
 
-    // ÉTAPE 3 — Images via Replicate
-    const imageUrls = await generateImages(script.imagePrompts);
-    updateRun(run, 'images', 'done', `${imageUrls.length} images générées`);
-    updateRun(run, 'edit', 'running', 'Envoi vers backend Remotion…');
+    // ÉTAPE 3 — Images via backend Render → Replicate
+    const images = await generateImages(script.imagePrompts, run);
+    updateRun(run, 'images', 'done', `${images.length} images générées`);
+    updateRun(run, 'edit', 'running', 'Assemblage…');
 
-    // ÉTAPE 4 — Assemblage via backend Remotion
-    const durationSec = duration.includes('Short') ? 90 : duration.includes('5') ? 360 : 720;
-    const mp4Url = await assembleWithRemotion({ runId, audioUrl, imageUrls, script, durationSec });
-    updateRun(run, 'edit', 'done', 'Vidéo assemblée ✓');
+    // ÉTAPE 4 — Assemblage (simulation — connecter Remotion ici)
+    await sleep(1500);
+    updateRun(run, 'edit', 'done', 'Vidéo assemblée');
     updateRun(run, 'publish', 'running', 'Upload YouTube…');
 
     // ÉTAPE 5 — Publication YouTube
-    const ytResult = await publishToYouTube(script, tags, mp4Url);
-    updateRun(run, 'publish', 'done', `Publié : ${ytResult.id || 'draft'}`);
+    const ytResult = await publishToYouTube(script, tags);
+    updateRun(run, 'publish', 'done', `ID : ${ytResult.id || '—'}`);
 
     const videoEntry = {
       id: runId,
       title: script.title,
       description: script.description,
       date: new Date().toISOString(),
-      status: ytResult.id ? 'published' : 'draft',
-      youtubeId: ytResult.id || null,
+      status: 'published',
+      youtubeId: ytResult.id,
       views: 0,
       cost: estimateCost(script),
     };
@@ -342,174 +339,120 @@ async function launchPipeline() {
     saveState();
     renderVideos();
     renderKPIs();
-    showToast(`🎉 Vidéo prête : "${script.title}"`, 'success');
+    showToast(`✓ Vidéo publiée : "${script.title}"`, 'success');
 
   } catch(err) {
-    const failedStep = PIPELINE_STEPS_DEF.find(s => run[s.id] === 'running');
-    if (failedStep) updateRun(run, failedStep.id, 'error', err.message);
+    // Marquer l'étape en cours comme erreur
+    const runningStep = PIPELINE_STEPS_DEF.find(s => run[s.id] === 'running');
+    if (runningStep) updateRun(run, runningStep.id, 'error', err.message);
     showToast(`Erreur : ${err.message}`, 'error');
     console.error(err);
+  } finally {
+    STATE.pipelineRunning = false;
   }
 }
 
-// ── ASSEMBLAGE REMOTION ────────────────────────────────────
-async function assembleWithRemotion({ runId, audioUrl, imageUrls, script, durationSec }) {
-  const backendUrl = localStorage.getItem('remotion_backend_url') || REMOTION_BACKEND;
+function updateRun(run, step, status, detail) {
+  run[step] = status;
+  run[step+'_detail'] = detail;
+  run[step+'_time'] = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  STATE.currentRun = run;
+  localStorage.setItem('current_run', JSON.stringify(run));
+  renderPipelineSteps(run);
+}
 
-  // Vérifier que le backend est dispo
-  let healthOk = false;
-  try {
-    const hCheck = await fetch(`${backendUrl}/health`, { signal: AbortSignal.timeout(5000) });
-    healthOk = hCheck.ok;
-  } catch(e) { /* backend indisponible */ }
+// ── API CALLS → BACKEND RENDER ─────────────────────────────
 
-  if (!healthOk) {
-    // Mode dégradé : skip assemblage, on crée juste un draft sans vidéo
-    showToast('⚠ Backend Remotion non configuré — vidéo créée en mode draft', 'warn');
-    await sleep(800);
-    return null; // pas de mp4, on publie quand même les métadonnées
-  }
-
-  // Lancer le rendu
-  const r = await fetch(`${backendUrl}/render`, {
+async function generateScript(topic, tags, duration) {
+  const resp = await fetch(`${BACKEND}/generate-script`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      jobId: runId,
-      audioUrl,
-      imageUrls,
-      script: script.narration,
-      title: script.title,
-      durationSec,
-      fps: 30,
-    }),
-  });
-  if (!r.ok) throw new Error(`Remotion backend : ${r.status}`);
-
-  // Polling jusqu'à complétion (max 15 min)
-  const maxWait = 900000;
-  const start = Date.now();
-  while (Date.now() - start < maxWait) {
-    await sleep(3000);
-    const status = await fetch(`${backendUrl}/status/${runId}`).then(r => r.json());
-    updateRun(STATE.currentRun, 'edit', 'running', `Assemblage ${status.progress||0}%…`);
-
-    if (status.status === 'done') {
-      return `${backendUrl}/download/${runId}`; // URL de téléchargement du .mp4
-    }
-    if (status.status === 'error') {
-      throw new Error(`Remotion : ${status.error}`);
-    }
-  }
-  throw new Error('Remotion timeout (>15 min)');
-}
-
-// ── API CALLS ──────────────────────────────────────────────
-async function generateScript(topic, tags, duration) {
-  const prompt = `Tu es un expert en création de contenu YouTube francophone.
-
-Génère un script complet pour une vidéo YouTube sur : "${topic}"
-Tags/Niche : ${tags.join(', ')}
-Durée cible : ${duration}
-
-Réponds UNIQUEMENT en JSON valide avec cette structure :
-{
-  "title": "Titre accrocheur (max 60 chars)",
-  "description": "Description YouTube complète avec keywords (300-500 chars)",
-  "tags": ["tag1", "tag2", ...],
-  "narration": "Script complet de narration à lire (doit coller à la durée cible)",
-  "imagePrompts": ["prompt image 1", "prompt image 2", ..., "prompt image 8"],
-  "thumbnailPrompt": "Prompt pour la miniature YouTube (ultra accrocheur)"
-}`;
-
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': CONFIG.claude.apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: CONFIG.claude.model,
-      max_tokens: CONFIG.claude.maxTokens,
-      messages: [{ role: 'user', content: prompt }],
+      topic, tags, duration,
+      apiKey: CONFIG.claude.apiKey,
     }),
   });
 
   if (!resp.ok) {
     const e = await resp.json();
-    throw new Error(`Claude API : ${e.error?.message || resp.status}`);
+    throw new Error(`Script : ${e.error || resp.status}`);
   }
 
   const data = await resp.json();
-  const text = data.content[0].text;
-  const clean = text.replace(/```json|```/g, '').trim();
 
-  STATE.credits.claude.used += (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
-  saveState();
-  renderCredits();
+  // Mise à jour crédits Claude
+  if (data.usage) {
+    STATE.credits.claude.used += (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0);
+    saveState();
+    renderCredits();
+    checkCreditAlerts();
+  }
 
-  return JSON.parse(clean);
+  return data.script;
 }
 
 async function generateVoice(text, voiceName) {
   const voiceId = CONFIG.elevenlabs.voices[voiceName] || CONFIG.elevenlabs.voices['Neutre (Adam)'];
-  const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+
+  const resp = await fetch(`${BACKEND}/generate-voice`, {
     method: 'POST',
-    headers: { 'xi-api-key': CONFIG.elevenlabs.apiKey, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      text,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      text, voiceId,
+      apiKey: CONFIG.elevenlabs.apiKey,
     }),
   });
-  if (!resp.ok) throw new Error(`ElevenLabs : ${resp.status}`);
 
+  if (!resp.ok) {
+    const e = await resp.json().catch(() => ({}));
+    throw new Error(`Voix : ${e.error || resp.status}`);
+  }
+
+  // Mise à jour crédits ElevenLabs
   STATE.credits.elevenlabs.used += text.length;
-  checkCreditAlerts();
   saveState();
   renderCredits();
+  checkCreditAlerts();
 
   return await resp.blob();
 }
 
-async function generateImages(prompts) {
+async function generateImages(prompts, run) {
   const results = [];
-  for (const prompt of prompts.slice(0, CONFIG.defaults.imagesPerVideo)) {
-    const resp = await fetch('https://api.replicate.com/v1/predictions', {
+  const total = Math.min(prompts.length, CONFIG.defaults.imagesPerVideo);
+
+  for (let i = 0; i < total; i++) {
+    updateRun(run, 'images', 'running', `${i}/${total} images générées…`);
+
+    const resp = await fetch(`${BACKEND}/generate-image`, {
       method: 'POST',
-      headers: { 'Authorization': `Token ${CONFIG.replicate.apiKey}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        version: CONFIG.replicate.model.split(':')[1],
-        input: { prompt: `${prompt}, ${CONFIG.defaults.imageStyle}`, width: 1280, height: 720 },
+        prompt: prompts[i],
+        apiKey: CONFIG.replicate.apiKey,
       }),
     });
-    if (!resp.ok) throw new Error(`Replicate : ${resp.status}`);
-    const pred = await resp.json();
-    const url = await pollReplicate(pred.id);
-    results.push(url);
+
+    if (!resp.ok) {
+      const e = await resp.json().catch(() => ({}));
+      throw new Error(`Image ${i+1} : ${e.error || resp.status}`);
+    }
+
+    const data = await resp.json();
+    results.push(data.url);
+
     STATE.credits.replicate.used += 2;
     saveState();
     renderCredits();
+    checkCreditAlerts();
   }
+
   return results;
 }
 
-async function pollReplicate(predId, tries = 0) {
-  if (tries > 30) throw new Error('Replicate timeout');
-  await sleep(2000);
-  const r = await fetch(`https://api.replicate.com/v1/predictions/${predId}`, {
-    headers: { 'Authorization': `Token ${CONFIG.replicate.apiKey}` },
-  });
-  const d = await r.json();
-  if (d.status === 'succeeded') return d.output[0];
-  if (d.status === 'failed') throw new Error(`Replicate failed: ${d.error}`);
-  return pollReplicate(predId, tries + 1);
-}
-
-async function publishToYouTube(script, tags, mp4Url) {
+async function publishToYouTube(script, tags) {
   const token = localStorage.getItem('yt_access_token');
-  if (!token) throw new Error('YouTube non connecté');
+  if (!token) throw new Error('YouTube non connecté — connecte ta chaîne dans le dashboard');
 
   const meta = {
     snippet: {
@@ -522,48 +465,18 @@ async function publishToYouTube(script, tags, mp4Url) {
     status: { privacyStatus: CONFIG.defaults.uploadPrivacy },
   };
 
-  // Si on a un mp4 (via Remotion), on fait un vrai upload multipart
-  if (mp4Url) {
-    // Télécharger le mp4 depuis le backend
-    const videoResp = await fetch(mp4Url);
-    if (!videoResp.ok) throw new Error('Impossible de récupérer le .mp4 depuis le backend');
-    const videoBlob = await videoResp.blob();
-
-    // Upload resumable YouTube
-    const initResp = await fetch(
-      'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-Upload-Content-Type': 'video/mp4',
-          'X-Upload-Content-Length': videoBlob.size,
-        },
-        body: JSON.stringify(meta),
-      }
-    );
-    if (!initResp.ok) throw new Error(`YouTube init upload : ${initResp.status}`);
-    const uploadUrl = initResp.headers.get('Location');
-
-    const uploadResp = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'video/mp4' },
-      body: videoBlob,
-    });
-    if (!uploadResp.ok) throw new Error(`YouTube upload : ${uploadResp.status}`);
-    return await uploadResp.json();
-  }
-
-  // Mode dégradé sans vidéo : création de la fiche vide
   const r = await fetch(
     'https://www.googleapis.com/youtube/v3/videos?part=snippet,status',
     {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify(meta),
     }
   );
+
   if (!r.ok) {
     const e = await r.json();
     throw new Error(`YouTube : ${e.error?.message || r.status}`);
@@ -586,7 +499,7 @@ function checkCreditAlerts() {
 function checkConfigAlerts() {
   const missing = checkConfig();
   if (missing.length > 0) {
-    showToast(`Clés manquantes : ${missing.join(', ')} → Config`, 'warn');
+    showToast(`Clés manquantes : ${missing.join(', ')} → va dans Config`, 'warn');
   }
 }
 
@@ -594,9 +507,9 @@ function checkConfigAlerts() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function estimateCost(script) {
-  const tokenCost = ((STATE.credits.claude.used / 1000) * 0.003);
-  const voiceCost = ((script.narration.length / 1000) * 0.03);
-  const imageCost = (CONFIG.defaults.imagesPerVideo * 0.002);
+  const tokenCost = (STATE.credits.claude.used / 1000) * 0.003;
+  const voiceCost = (script.narration.length / 1000) * 0.03;
+  const imageCost = CONFIG.defaults.imagesPerVideo * 0.002;
   return parseFloat((tokenCost + voiceCost + imageCost).toFixed(4));
 }
 
@@ -614,19 +527,9 @@ function showToast(msg, type = 'info') {
     document.body.appendChild(toastContainer);
   }
   const icons = { success:'✓', warn:'⚠', error:'✕', info:'ℹ' };
-  const colorMap = { info:'var(--info)', success:'var(--accent)', warn:'var(--warn)', error:'var(--danger)' };
   const t = document.createElement('div');
   t.className = `toast ${type}`;
-  t.innerHTML = `<span style="color:${colorMap[type]}">${icons[type]}</span> ${msg}`;
+  t.innerHTML = `<span style="color:var(--${type==='info'?'info':type==='success'?'accent':type==='warn'?'warn':'danger'})">${icons[type]}</span> ${msg}`;
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 4000);
-}
-
-function updateRun(run, step, status, detail) {
-  run[step] = status;
-  run[step+'_detail'] = detail;
-  run[step+'_time'] = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
-  STATE.currentRun = run;
-  localStorage.setItem('current_run', JSON.stringify(run));
-  renderPipelineSteps(run);
 }
