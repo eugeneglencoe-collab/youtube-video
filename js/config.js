@@ -1,6 +1,6 @@
 // ============================================================
-//  CONFIG — AutoTube v4
-//  Gemini 2.5 Flash + Unreal Speech + Replicate + YouTube
+//  CONFIG — AutoTube v5
+//  Gemini 2.5 Flash + Unreal Speech + Stability AI + YouTube
 // ============================================================
 
 const CONFIG = {
@@ -17,9 +17,10 @@ const CONFIG = {
     // Gratuit : 250 000 chars/mois
   },
 
-  // ── REPLICATE (Images) ────────────────────────────────────
-  replicate: {
-    apiKey: localStorage.getItem('replicate_api_key') || '',
+  // ── STABILITY AI (Images) ─────────────────────────────────
+  stability: {
+    apiKey: localStorage.getItem('stability_api_key') || '',
+    // Gratuit : 25 crédits/jour
   },
 
   // ── YOUTUBE ───────────────────────────────────────────────
@@ -41,7 +42,7 @@ const CONFIG = {
   defaults: {
     language: 'fr',
     imageStyle: 'cinematic, high quality, 4k',
-    imagesPerVideo: 8,
+    imagesPerVideo: 4, // 4 images = 4 crédits/vidéo sur les 25 gratuits/jour
     uploadPrivacy: 'private',
   },
 
@@ -49,9 +50,9 @@ const CONFIG = {
 
 function checkConfig() {
   const missing = [];
-  if (!CONFIG.gemini.apiKey)        missing.push('Gemini');
-  if (!CONFIG.unrealSpeech.apiKey)  missing.push('Unreal Speech');
-  if (!CONFIG.replicate.apiKey)     missing.push('Replicate');
-  if (!CONFIG.youtube.clientId)     missing.push('YouTube');
+  if (!CONFIG.gemini.apiKey)       missing.push('Gemini');
+  if (!CONFIG.unrealSpeech.apiKey) missing.push('Unreal Speech');
+  if (!CONFIG.stability.apiKey)    missing.push('Stability AI');
+  if (!CONFIG.youtube.clientId)    missing.push('YouTube');
   return missing;
 }
