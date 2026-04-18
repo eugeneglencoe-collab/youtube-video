@@ -1,6 +1,6 @@
 // ============================================================
-//  CONFIG — AutoTube v2
-//  Gemini 1.5 Flash remplace Claude
+//  CONFIG — AutoTube v3
+//  Gemini 2.5 Flash + OpenAI TTS + Replicate + YouTube
 // ============================================================
 
 const CONFIG = {
@@ -8,13 +8,19 @@ const CONFIG = {
   // ── GEMINI (Google AI Studio) ──────────────────────────────
   gemini: {
     apiKey: localStorage.getItem('gemini_api_key') || '',
-    model: 'gemini-1.5-flash',
-    // Gratuit : 1 500 requêtes/jour, 1M tokens/min
+    model: 'gemini-2.5-flash',
+    // Gratuit avec facturation activée
   },
 
-  // ── ELEVENLABS (Voix) ──────────────────────────────────────
+  // ── OPENAI (TTS Voix) ─────────────────────────────────────
+  openai: {
+    apiKey: localStorage.getItem('openai_api_key') || '',
+    // $15 de crédit offert · tts-1 ~$0.015/1k chars
+  },
+
+  // ── ELEVENLABS (désactivé) ────────────────────────────────
   elevenlabs: {
-    apiKey: localStorage.getItem('elevenlabs_api_key') || '',
+    apiKey: '',
     voices: {
       'Neutre (Adam)':    'pNInz6obpgDQGcFmaJgB',
       'Dynamique (Josh)': 'TxGEqnHWrfWFTfGW9XjX',
@@ -59,14 +65,13 @@ const CONFIG = {
 function saveApiKey(service, key) {
   localStorage.setItem(`${service}_api_key`, key);
   if (CONFIG[service]) CONFIG[service].apiKey = key;
-  showToast(`Clé ${service} sauvegardée ✓`, 'success');
 }
 
 function checkConfig() {
   const missing = [];
-  if (!CONFIG.gemini.apiKey)      missing.push('Gemini');
-  if (!CONFIG.elevenlabs.apiKey)  missing.push('ElevenLabs');
-  if (!CONFIG.replicate.apiKey)   missing.push('Replicate');
-  if (!CONFIG.youtube.clientId)   missing.push('YouTube');
+  if (!CONFIG.gemini.apiKey)   missing.push('Gemini');
+  if (!CONFIG.openai.apiKey)   missing.push('OpenAI');
+  if (!CONFIG.replicate.apiKey) missing.push('Replicate');
+  if (!CONFIG.youtube.clientId) missing.push('YouTube');
   return missing;
 }
