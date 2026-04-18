@@ -79,14 +79,20 @@ function renderCredits() {
     replicate: { name: 'Replicate',   icon: '◈' },
   };
 
-  const html = Object.entries(STATE.credits).filter(([key]) => labels[key]).map(([key, c]) => {
+  // Forcer la structure correcte — ignorer toute clé inconnue
+  const credits = {
+    gemini:    STATE.credits.gemini    || { used: 0, total: 1500,  unit: 'requêtes' },
+    openai:    STATE.credits.openai    || { used: 0, total: 50000, unit: 'chars' },
+    replicate: STATE.credits.replicate || { used: 0, total: 5000,  unit: 'cents' },
+  };
+
+  const html = Object.entries(credits).map(([key, c]) => {
     const pct = Math.max(0, 100 - (c.used / c.total * 100));
     const cls = pct < CONFIG.alerts.dangerThreshold ? 'danger'
               : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
     const remaining = c.unit === 'cents'
       ? `$${((c.total - c.used)/100).toFixed(2)} restant`
       : `${(c.total - c.used).toLocaleString()} ${c.unit} restant`;
-
     return `<div class="credit-item">
       <div class="credit-header">
         <span class="credit-name">${labels[key].icon} ${labels[key].name}</span>
