@@ -315,8 +315,8 @@ async function launchPipeline() {
   try {
     // ÉTAPE 1 — Script
     const script = await generateScript(topic, tags, duration);
+    console.log('SCRIPT COMPLET:', JSON.stringify(script, null, 2)); // ← debug
     updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
-    updateRun(run, 'voice', 'running', 'Unreal Speech en cours…');
 
     // ÉTAPE 2 — Voix
     const audioUrl = await generateVoice(script.narration, voice);
