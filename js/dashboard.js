@@ -326,17 +326,32 @@ async function launchPipeline() {
     // ÉTAPE 3 — Images
     const images = await generateImages(script.imagePrompts, run);
     updateRun(run, 'images', 'done', `${images.length} images générées`);
-    updateRun(run, 'edit', 'running', 'Assemblage…');
+    updateRun(run, 'edit', 'running', 'Assemblage + upload YouTube…');
 
-    // ÉTAPE 4 — Assemblage
-    await sleep(1500);
-    updateRun(run, 'edit', 'done', 'Vidéo assemblée');
-    updateRun(run, 'publish', 'running', 'Upload YouTube…');
+    // ÉTAPES 4 & 5 — Assemblage ffmpeg + Publication YouTube
+    const ytToken = localStorage.getItem('yt_access_token');
+    const prefs   = JSON.parse(localStorage.getItem('autotube_prefs') || '{}');
+    const assembleResp = await fetch(`${BACKEND}/assemble-and-publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        images,
+        audioUrl,
+        script,
+        tags,
+        privacy: prefs.uploadPrivacy || 'private',
+        ytToken,
+      }),
+    });
+    if (!assembleResp.ok) {
+      const e = await assembleResp.json().catch(() => ({}));
+      throw new Error(`Assemblage : ${e.error || assembleResp.status}`);
+    }
+    const assembleData = await assembleResp.json();
+    updateRun(run, 'edit', 'done', 'Vidéo MP4 assemblée ✓');
+    updateRun(run, 'publish', 'done', `ID : ${assembleData.youtubeId || '—'}`);
 
-    // ÉTAPE 5 — Publication YouTube
-    const ytResult = await publishToYouTube(script, tags);
-    updateRun(run, 'publish', 'done', `ID : ${ytResult.id || '—'}`);
-
+    const ytResult = { id: assembleData.youtubeId };
     const videoEntry = {
       id: runId,
       title: script.title,
