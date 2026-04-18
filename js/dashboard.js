@@ -9,9 +9,9 @@ const BACKEND = 'https://server-f28i.onrender.com';
 const STATE = {
   videos: JSON.parse(localStorage.getItem('autotube_videos') || '[]'),
   credits: JSON.parse(localStorage.getItem('autotube_credits') || 'null') || {
-    claude:      { used: 0, total: 500000, unit: 'tokens' },
-    elevenlabs:  { used: 0, total: 10000,  unit: 'chars' },
-    replicate:   { used: 0, total: 5000,   unit: 'cents' },
+    gemini:      { used: 0, total: 1500,  unit: 'requêtes' },
+    elevenlabs:  { used: 0, total: 10000, unit: 'chars' },
+    replicate:   { used: 0, total: 5000,  unit: 'cents' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
   ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
@@ -72,9 +72,9 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    claude:     { name: 'Claude API', icon: '⬡' },
-    elevenlabs: { name: 'ElevenLabs', icon: '◎' },
-    replicate:  { name: 'Replicate',  icon: '◈' },
+    gemini:     { name: 'Gemini API',  icon: '◆' },
+    elevenlabs: { name: 'ElevenLabs',  icon: '◎' },
+    replicate:  { name: 'Replicate',   icon: '◈' },
   };
 
   const html = Object.entries(STATE.credits).map(([key, c]) => {
@@ -121,7 +121,7 @@ async function refreshCredits() {
 
 // ── PIPELINE STEPS ─────────────────────────────────────────
 const PIPELINE_STEPS_DEF = [
-  { id: 'idea',    name: 'Génération du script',  icon: '⬡', detail: 'Claude API via Render' },
+  { id: 'idea',    name: 'Génération du script',  icon: '◆', detail: 'Gemini 1.5 Flash via Render' },
   { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'ElevenLabs via Render' },
   { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Replicate SDXL via Render' },
   { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion' },
@@ -269,7 +269,7 @@ function openLaunch() {
   const missing = checkConfig();
   if (missing.length > 0) {
     showToast(`Configure d'abord : ${missing.join(', ')}`, 'warn');
-    setTimeout(() => window.location.href = '../pages/settings.html', 1500);
+    setTimeout(() => window.location.href = 'pages/settings.html', 1500);
     return;
   }
   document.getElementById('launch-modal').classList.add('open');
@@ -295,13 +295,13 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Appel Claude via Render…' };
+  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
 
   try {
-    // ÉTAPE 1 — Script via backend Render → Claude
+    // ÉTAPE 1 — Script via backend Render → Gemini
     const script = await generateScript(topic, tags, duration);
     updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
     updateRun(run, 'voice', 'running', 'ElevenLabs en cours…');
@@ -316,7 +316,7 @@ async function launchPipeline() {
     updateRun(run, 'images', 'done', `${images.length} images générées`);
     updateRun(run, 'edit', 'running', 'Assemblage…');
 
-    // ÉTAPE 4 — Assemblage (simulation — connecter Remotion ici)
+    // ÉTAPE 4 — Assemblage (simulation — Remotion à connecter)
     await sleep(1500);
     updateRun(run, 'edit', 'done', 'Vidéo assemblée');
     updateRun(run, 'publish', 'running', 'Upload YouTube…');
@@ -342,7 +342,6 @@ async function launchPipeline() {
     showToast(`✓ Vidéo publiée : "${script.title}"`, 'success');
 
   } catch(err) {
-    // Marquer l'étape en cours comme erreur
     const runningStep = PIPELINE_STEPS_DEF.find(s => run[s.id] === 'running');
     if (runningStep) updateRun(run, runningStep.id, 'error', err.message);
     showToast(`Erreur : ${err.message}`, 'error');
@@ -374,19 +373,17 @@ async function generateScript(topic, tags, duration) {
   });
 
   if (!resp.ok) {
-    const e = await resp.json();
+    const e = await resp.json().catch(() => ({}));
     throw new Error(`Script : ${e.error || resp.status}`);
   }
 
   const data = await resp.json();
 
-  // Mise à jour crédits Claude
-  if (data.usage) {
-    STATE.credits.claude.used += (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0);
-    saveState();
-    renderCredits();
-    checkCreditAlerts();
-  }
+  // Mise à jour crédits Gemini (1 requête par script)
+  STATE.credits.gemini.used += 1;
+  saveState();
+  renderCredits();
+  checkCreditAlerts();
 
   return data.script;
 }
@@ -408,7 +405,6 @@ async function generateVoice(text, voiceName) {
     throw new Error(`Voix : ${e.error || resp.status}`);
   }
 
-  // Mise à jour crédits ElevenLabs
   STATE.credits.elevenlabs.used += text.length;
   saveState();
   renderCredits();
@@ -507,10 +503,9 @@ function checkConfigAlerts() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function estimateCost(script) {
-  const tokenCost = (STATE.credits.claude.used / 1000) * 0.003;
   const voiceCost = (script.narration.length / 1000) * 0.03;
   const imageCost = CONFIG.defaults.imagesPerVideo * 0.002;
-  return parseFloat((tokenCost + voiceCost + imageCost).toFixed(4));
+  return parseFloat((voiceCost + imageCost).toFixed(4));
 }
 
 function set(id, val) {
