@@ -412,14 +412,10 @@ async function generateImages(prompts, run) {
   for (let i = 0; i < total; i++) {
     updateRun(run, 'images', 'running', `${i}/${total} images…`);
 
-    // Stability AI attend du multipart/form-data
-    const formData = new FormData();
-    formData.append('prompt', prompts[i]);
-    formData.append('apiKey', CONFIG.stability.apiKey);
-
     const resp = await fetch(`${BACKEND}/generate-image`, {
       method: 'POST',
-      body: formData,   // pas de Content-Type manuel : le navigateur le pose automatiquement avec le bon boundary
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompts[i], apiKey: CONFIG.stability.apiKey }),
     });
 
     if (!resp.ok) {
