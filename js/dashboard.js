@@ -1,6 +1,6 @@
 // ============================================================
-//  DASHBOARD — AutoTube v3
-//  Gemini 2.5 Flash + OpenAI TTS + Replicate + YouTube
+//  DASHBOARD — AutoTube v4
+//  Gemini 2.5 Flash + Unreal Speech + Replicate + YouTube
 // ============================================================
 
 const BACKEND = 'https://server-f28i.onrender.com';
@@ -8,10 +8,10 @@ const BACKEND = 'https://server-f28i.onrender.com';
 // ── STATE ──────────────────────────────────────────────────
 const STATE = {
   videos: JSON.parse(localStorage.getItem('autotube_videos') || '[]'),
-  credits: JSON.parse(localStorage.getItem('autotube_credits') || 'null') || {
-    gemini:    { used: 0, total: 1500,  unit: 'requêtes' },
-    openai:    { used: 0, total: 50000, unit: 'chars' },
-    replicate: { used: 0, total: 5000,  unit: 'cents' },
+  credits: {
+    gemini:       { used: 0, total: 1500,   unit: 'requêtes' },
+    unrealSpeech: { used: 0, total: 250000, unit: 'chars' },
+    replicate:    { used: 0, total: 5000,   unit: 'cents' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
   ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
@@ -19,16 +19,21 @@ const STATE = {
   currentRun: JSON.parse(localStorage.getItem('current_run') || 'null'),
 };
 
+// NE PAS charger les crédits depuis localStorage pour éviter les conflits
 function saveState() {
   localStorage.setItem('autotube_videos', JSON.stringify(STATE.videos));
   localStorage.setItem('autotube_credits', JSON.stringify(STATE.credits));
 }
 
 // ── INIT ───────────────────────────────────────────────────
-// Gérer le redirect OAuth EN PREMIER, avant tout le reste
 handleOAuthRedirect();
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Recharger les crédits sauvegardés si structure correcte
+  const saved = JSON.parse(localStorage.getItem('autotube_credits') || 'null');
+  if (saved && saved.gemini && saved.unrealSpeech && saved.replicate) {
+    STATE.credits = saved;
+  }
   renderKPIs();
   renderCredits();
   renderPipelineSteps();
@@ -58,6 +63,8 @@ function renderKPIs() {
     set('kpi-credits-delta', '⚠ Crédits critiques');
   } else if (avgPct < CONFIG.alerts.warnThreshold) {
     set('kpi-credits-delta', '⚠ Recharger bientôt');
+  } else {
+    set('kpi-credits-delta', 'Multi-services');
   }
 
   const week = STATE.videos.filter(v => (Date.now() - new Date(v.date)) < 7*24*3600*1000).length;
@@ -74,28 +81,23 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    gemini:    { name: 'Gemini API',  icon: '◆' },
-    openai:    { name: 'OpenAI TTS',  icon: '◎' },
-    replicate: { name: 'Replicate',   icon: '◈' },
+    gemini:       { name: 'Gemini API',     icon: '◆' },
+    unrealSpeech: { name: 'Unreal Speech',  icon: '◎' },
+    replicate:    { name: 'Replicate',      icon: '◈' },
   };
 
-  // Forcer la structure correcte — ignorer toute clé inconnue
-  const credits = {
-    gemini:    STATE.credits.gemini    || { used: 0, total: 1500,  unit: 'requêtes' },
-    openai:    STATE.credits.openai    || { used: 0, total: 50000, unit: 'chars' },
-    replicate: STATE.credits.replicate || { used: 0, total: 5000,  unit: 'cents' },
-  };
-
-  const html = Object.entries(credits).map(([key, c]) => {
+  const html = Object.entries(labels).map(([key, label]) => {
+    const c = STATE.credits[key] || { used: 0, total: 1, unit: '' };
     const pct = Math.max(0, 100 - (c.used / c.total * 100));
     const cls = pct < CONFIG.alerts.dangerThreshold ? 'danger'
               : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
     const remaining = c.unit === 'cents'
       ? `$${((c.total - c.used)/100).toFixed(2)} restant`
       : `${(c.total - c.used).toLocaleString()} ${c.unit} restant`;
+
     return `<div class="credit-item">
       <div class="credit-header">
-        <span class="credit-name">${labels[key].icon} ${labels[key].name}</span>
+        <span class="credit-name">${label.icon} ${label.name}</span>
         <span class="credit-value ${cls}">${Math.round(pct)}%</span>
       </div>
       <div class="credit-bar">
@@ -119,7 +121,7 @@ async function refreshCredits() {
 // ── PIPELINE STEPS ─────────────────────────────────────────
 const PIPELINE_STEPS_DEF = [
   { id: 'idea',    name: 'Génération du script',  icon: '◆', detail: 'Gemini 2.5 Flash via Render' },
-  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'OpenAI TTS via Render' },
+  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'Unreal Speech via Render' },
   { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Replicate SDXL via Render' },
   { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion' },
   { id: 'publish', name: 'Publication YouTube',    icon: '▶', detail: 'YouTube Data API v3' },
@@ -188,13 +190,10 @@ function openVideo(id) {
 // ── YOUTUBE ────────────────────────────────────────────────
 function renderYouTube() {
   const btn = document.getElementById('yt-connect-btn');
-
   if (!STATE.ytConnected || !STATE.ytData) {
-    // Afficher le placeholder si pas connecté
     if (btn) btn.textContent = 'Connecter →';
     return;
   }
-
   const d = STATE.ytData;
   document.getElementById('yt-stats').innerHTML = `
     <div class="yt-stats-grid">
@@ -228,10 +227,7 @@ async function connectYoutube() {
     setTimeout(() => window.location.href = 'pages/settings.html', 1500);
     return;
   }
-
-  // redirect_uri = URL exacte de index.html
   const redirectUri = 'https://eugeneglencoe-collab.github.io/youtube-video/index.html';
-
   const params = new URLSearchParams({
     client_id: CONFIG.youtube.clientId,
     redirect_uri: redirectUri,
@@ -243,22 +239,14 @@ async function connectYoutube() {
 }
 
 function handleOAuthRedirect() {
-  // Lire le hash AVANT qu'il soit effacé
   const hash = window.location.hash;
   if (!hash || hash.length < 2) return;
-
   const params = new URLSearchParams(hash.slice(1));
   const token = params.get('access_token');
   if (!token) return;
-
-  // Sauvegarder le token
   localStorage.setItem('yt_access_token', token);
   STATE.ytConnected = true;
-
-  // Effacer le hash proprement sans rechargement
   history.replaceState(null, '', window.location.pathname);
-
-  // Charger les stats après que le DOM soit prêt
   document.addEventListener('DOMContentLoaded', () => {
     showToast('YouTube connecté ! Chargement des stats…', 'success');
     fetchYouTubeStats(token);
@@ -289,11 +277,10 @@ async function fetchYouTubeStats(token) {
 
 // ── LAUNCH MODAL ───────────────────────────────────────────
 function openLaunch() {
-  // Recharger les clés depuis localStorage au cas où elles ont été ajoutées
-  CONFIG.gemini.apiKey  = localStorage.getItem('gemini_api_key') || '';
-  CONFIG.openai.apiKey  = localStorage.getItem('openai_api_key') || '';
-  CONFIG.replicate.apiKey = localStorage.getItem('replicate_api_key') || '';
-  CONFIG.youtube.clientId = localStorage.getItem('yt_client_id') || '';
+  CONFIG.gemini.apiKey       = localStorage.getItem('gemini_api_key') || '';
+  CONFIG.unrealSpeech.apiKey = localStorage.getItem('unrealspeech_api_key') || '';
+  CONFIG.replicate.apiKey    = localStorage.getItem('replicate_api_key') || '';
+  CONFIG.youtube.clientId    = localStorage.getItem('yt_client_id') || '';
 
   const missing = checkConfig();
   if (missing.length > 0) {
@@ -333,11 +320,11 @@ async function launchPipeline() {
     // ÉTAPE 1 — Script via Gemini
     const script = await generateScript(topic, tags, duration);
     updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
-    updateRun(run, 'voice', 'running', 'OpenAI TTS en cours…');
+    updateRun(run, 'voice', 'running', 'Unreal Speech en cours…');
 
-    // ÉTAPE 2 — Voix via OpenAI TTS
-    const audioBlob = await generateVoice(script.narration, voice);
-    updateRun(run, 'voice', 'done', `Audio ${Math.round(audioBlob.size/1024)} KB`);
+    // ÉTAPE 2 — Voix via Unreal Speech
+    const audioUrl = await generateVoice(script.narration, voice);
+    updateRun(run, 'voice', 'done', 'Audio généré ✓');
     updateRun(run, 'images', 'running', `0/${CONFIG.defaults.imagesPerVideo} images…`);
 
     // ÉTAPE 3 — Images via Replicate
@@ -395,23 +382,15 @@ async function generateScript(topic, tags, duration) {
   const resp = await fetch(`${BACKEND}/generate-script`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      topic, tags, duration,
-      apiKey: CONFIG.gemini.apiKey,
-    }),
+    body: JSON.stringify({ topic, tags, duration, apiKey: CONFIG.gemini.apiKey }),
   });
-
   if (!resp.ok) {
     const e = await resp.json().catch(() => ({}));
     throw new Error(`Script : ${e.error || resp.status}`);
   }
-
   const data = await resp.json();
   STATE.credits.gemini.used += 1;
-  saveState();
-  renderCredits();
-  checkCreditAlerts();
-
+  saveState(); renderCredits(); checkCreditAlerts();
   return data.script;
 }
 
@@ -422,60 +401,44 @@ async function generateVoice(text, voiceName) {
     body: JSON.stringify({
       text,
       voiceId: voiceName,
-      apiKey: CONFIG.openai.apiKey,
+      apiKey: CONFIG.unrealSpeech.apiKey,
     }),
   });
-
   if (!resp.ok) {
     const e = await resp.json().catch(() => ({}));
     throw new Error(`Voix : ${e.error || resp.status}`);
   }
-
-  STATE.credits.openai.used += text.length;
-  saveState();
-  renderCredits();
-  checkCreditAlerts();
-
-  return await resp.blob();
+  const data = await resp.json();
+  STATE.credits.unrealSpeech.used += text.length;
+  saveState(); renderCredits(); checkCreditAlerts();
+  return data.audioUrl;
 }
 
 async function generateImages(prompts, run) {
   const results = [];
   const total = Math.min(prompts.length, CONFIG.defaults.imagesPerVideo);
-
   for (let i = 0; i < total; i++) {
     updateRun(run, 'images', 'running', `${i}/${total} images générées…`);
-
     const resp = await fetch(`${BACKEND}/generate-image`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: prompts[i],
-        apiKey: CONFIG.replicate.apiKey,
-      }),
+      body: JSON.stringify({ prompt: prompts[i], apiKey: CONFIG.replicate.apiKey }),
     });
-
     if (!resp.ok) {
       const e = await resp.json().catch(() => ({}));
       throw new Error(`Image ${i+1} : ${e.error || resp.status}`);
     }
-
     const data = await resp.json();
     results.push(data.url);
-
     STATE.credits.replicate.used += 2;
-    saveState();
-    renderCredits();
-    checkCreditAlerts();
+    saveState(); renderCredits(); checkCreditAlerts();
   }
-
   return results;
 }
 
 async function publishToYouTube(script, tags) {
   const token = localStorage.getItem('yt_access_token');
   if (!token) throw new Error('YouTube non connecté — connecte ta chaîne dans le dashboard');
-
   const meta = {
     snippet: {
       title: script.title,
@@ -486,19 +449,14 @@ async function publishToYouTube(script, tags) {
     },
     status: { privacyStatus: CONFIG.defaults.uploadPrivacy },
   };
-
   const r = await fetch(
     'https://www.googleapis.com/youtube/v3/videos?part=snippet,status',
     {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(meta),
     }
   );
-
   if (!r.ok) {
     const e = await r.json();
     throw new Error(`YouTube : ${e.error?.message || r.status}`);
@@ -506,7 +464,7 @@ async function publishToYouTube(script, tags) {
   return await r.json();
 }
 
-// ── ALERTES CRÉDITS ────────────────────────────────────────
+// ── ALERTES ────────────────────────────────────────────────
 function checkCreditAlerts() {
   Object.entries(STATE.credits).forEach(([key, c]) => {
     const pct = 100 - (c.used / c.total * 100);
@@ -529,9 +487,8 @@ function checkConfigAlerts() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function estimateCost(script) {
-  const voiceCost = (script.narration.length / 1000) * 0.015;
   const imageCost = CONFIG.defaults.imagesPerVideo * 0.002;
-  return parseFloat((voiceCost + imageCost).toFixed(4));
+  return parseFloat(imageCost.toFixed(4));
 }
 
 function set(id, val) {
