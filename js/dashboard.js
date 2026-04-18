@@ -411,11 +411,17 @@ async function generateImages(prompts, run) {
   const total = Math.min(prompts.length, CONFIG.defaults.imagesPerVideo);
   for (let i = 0; i < total; i++) {
     updateRun(run, 'images', 'running', `${i}/${total} images…`);
+
+    // Stability AI attend du multipart/form-data
+    const formData = new FormData();
+    formData.append('prompt', prompts[i]);
+    formData.append('apiKey', CONFIG.stability.apiKey);
+
     const resp = await fetch(`${BACKEND}/generate-image`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompts[i], apiKey: CONFIG.stability.apiKey }),
+      body: formData,   // pas de Content-Type manuel : le navigateur le pose automatiquement avec le bon boundary
     });
+
     if (!resp.ok) {
       const e = await resp.json().catch(() => ({}));
       throw new Error(`Image ${i+1} : ${e.error || resp.status}`);
