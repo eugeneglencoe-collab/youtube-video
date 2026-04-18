@@ -79,7 +79,7 @@ function renderCredits() {
     replicate: { name: 'Replicate',   icon: '◈' },
   };
 
-  const html = Object.entries(STATE.credits).map(([key, c]) => {
+  const html = Object.entries(STATE.credits).filter(([key]) => labels[key]).map(([key, c]) => {
     const pct = Math.max(0, 100 - (c.used / c.total * 100));
     const cls = pct < CONFIG.alerts.dangerThreshold ? 'danger'
               : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
