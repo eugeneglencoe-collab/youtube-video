@@ -12,10 +12,7 @@
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
 <aside class="sidebar">
-  <div class="logo">
-    <span class="logo-icon">▶</span>
-    <span class="logo-text">AutoTube</span>
-  </div>
+  <div class="logo"><span class="logo-icon">▶</span><span class="logo-text">AutoTube</span></div>
   <nav class="nav">
     <a href="../index.html" class="nav-item"><span class="nav-icon">⬡</span> Dashboard</a>
     <a href="pipeline.html" class="nav-item"><span class="nav-icon">⟳</span> Pipeline</a>
@@ -23,10 +20,7 @@
     <a href="credits.html" class="nav-item"><span class="nav-icon">◈</span> Crédits</a>
     <a href="settings.html" class="nav-item active"><span class="nav-icon">⚙</span> Config</a>
   </nav>
-  <div class="sidebar-status">
-    <div class="status-dot active"></div>
-    <span>Pipeline actif</span>
-  </div>
+  <div class="sidebar-status"><div class="status-dot active"></div><span>Pipeline actif</span></div>
 </aside>
 <main class="main">
   <header class="topbar">
@@ -48,29 +42,29 @@
         <div class="form-group">
           <label class="form-label">Clé API <a href="https://aistudio.google.com" target="_blank" class="form-link">Google AI Studio →</a></label>
           <div class="input-row">
-            <input class="form-input" type="password" id="gemini-key" placeholder="AIza…" value="">
+            <input class="form-input" type="password" id="gemini-key" placeholder="AIza…">
             <button class="btn-save" onclick="saveKey('gemini', 'gemini-key', 'gemini-badge')">Sauvegarder</button>
           </div>
         </div>
-        <div class="settings-info">Gemini 2.5 Flash · Gratuit avec facturation Google activée</div>
+        <div class="settings-info">Gemini 2.5 Flash · Script + métadonnées</div>
       </div>
     </div>
 
-    <!-- OPENAI TTS -->
+    <!-- UNREAL SPEECH -->
     <div class="panel settings-card">
       <div class="panel-header">
-        <span class="panel-title">◎ OpenAI TTS</span>
-        <span class="panel-badge" id="openai-badge">Non configuré</span>
+        <span class="panel-title">◎ Unreal Speech</span>
+        <span class="panel-badge" id="unrealspeech-badge">Non configuré</span>
       </div>
       <div class="settings-body">
         <div class="form-group">
-          <label class="form-label">Clé API <a href="https://platform.openai.com/api-keys" target="_blank" class="form-link">Obtenir →</a></label>
+          <label class="form-label">Clé API <a href="https://unrealspeech.com" target="_blank" class="form-link">unrealspeech.com →</a></label>
           <div class="input-row">
-            <input class="form-input" type="password" id="openai-key" placeholder="sk-proj-…" value="">
-            <button class="btn-save" onclick="saveKey('openai', 'openai-key', 'openai-badge')">Sauvegarder</button>
+            <input class="form-input" type="password" id="unrealspeech-key" placeholder="…">
+            <button class="btn-save" onclick="saveKey('unrealspeech', 'unrealspeech-key', 'unrealspeech-badge')">Sauvegarder</button>
           </div>
         </div>
-        <div class="settings-info">$15 de crédit offert · tts-1 ~$0.015/1k chars · Voix excellentes en français</div>
+        <div class="settings-info">Gratuit : 250 000 chars/mois · Voix : Scarlett, Dan, Liv</div>
       </div>
     </div>
 
@@ -84,7 +78,7 @@
         <div class="form-group">
           <label class="form-label">Token API <a href="https://replicate.com/account" target="_blank" class="form-link">Obtenir →</a></label>
           <div class="input-row">
-            <input class="form-input" type="password" id="replicate-key" placeholder="r8_…" value="">
+            <input class="form-input" type="password" id="replicate-key" placeholder="r8_…">
             <button class="btn-save" onclick="saveKey('replicate', 'replicate-key', 'replicate-badge')">Sauvegarder</button>
           </div>
         </div>
@@ -102,26 +96,17 @@
         <div class="form-group">
           <label class="form-label">OAuth Client ID <a href="https://console.cloud.google.com" target="_blank" class="form-link">Google Console →</a></label>
           <div class="input-row">
-            <input class="form-input" type="text" id="yt-client-id" placeholder="xxxxx.apps.googleusercontent.com" value="">
+            <input class="form-input" type="text" id="yt-client-id" placeholder="xxxxx.apps.googleusercontent.com">
             <button class="btn-save" onclick="saveYTClientId()">Sauvegarder</button>
           </div>
         </div>
         <div class="settings-info">YouTube Data API v3 · Gratuit</div>
-        <div class="yt-steps">
-          <div class="yt-step">1. Va sur <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a></div>
-          <div class="yt-step">2. Crée un projet → Active "YouTube Data API v3"</div>
-          <div class="yt-step">3. Identifiants → Créer un ID client OAuth → Application Web</div>
-          <div class="yt-step">4. Ajoute ton URL GitHub Pages dans "Origines autorisées"</div>
-          <div class="yt-step">5. Colle l'ID client ici</div>
-        </div>
       </div>
     </div>
 
     <!-- PARAMÈTRES VIDÉO -->
     <div class="panel settings-card" style="grid-column: span 2">
-      <div class="panel-header">
-        <span class="panel-title">⚙ Paramètres vidéo</span>
-      </div>
+      <div class="panel-header"><span class="panel-title">⚙ Paramètres vidéo</span></div>
       <div class="settings-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
         <div class="form-group">
           <label class="form-label">Visibilité par défaut</label>
@@ -159,19 +144,16 @@
 .btn-save:hover { background: var(--accent-dim); border-color: rgba(0,255,136,0.4); }
 .form-link { color: var(--accent); text-decoration: none; font-size: 10px; margin-left: 8px; }
 .form-link:hover { text-decoration: underline; }
-.yt-steps { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.yt-step { font-size: 11px; color: var(--text2); line-height: 1.5; }
-.yt-step a { color: var(--accent); text-decoration: none; }
 @media (max-width: 900px) { .settings-grid { grid-template-columns: 1fr; } .settings-card[style*="span 2"] { grid-column: span 1 !important; } }
 </style>
 
 <script src="../js/config.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  if (localStorage.getItem('gemini_api_key'))    { document.getElementById('gemini-key').value = '••••••••'; badge('gemini-badge', true); }
-  if (localStorage.getItem('openai_api_key'))    { document.getElementById('openai-key').value = '••••••••'; badge('openai-badge', true); }
-  if (localStorage.getItem('replicate_api_key')) { document.getElementById('replicate-key').value = '••••••••'; badge('replicate-badge', true); }
-  if (localStorage.getItem('yt_client_id'))      { document.getElementById('yt-client-id').value = localStorage.getItem('yt_client_id'); badge('yt-badge', true); }
+  if (localStorage.getItem('gemini_api_key'))       { document.getElementById('gemini-key').value = '••••••••'; badge('gemini-badge', true); }
+  if (localStorage.getItem('unrealspeech_api_key')) { document.getElementById('unrealspeech-key').value = '••••••••'; badge('unrealspeech-badge', true); }
+  if (localStorage.getItem('replicate_api_key'))    { document.getElementById('replicate-key').value = '••••••••'; badge('replicate-badge', true); }
+  if (localStorage.getItem('yt_client_id'))         { document.getElementById('yt-client-id').value = localStorage.getItem('yt_client_id'); badge('yt-badge', true); }
 });
 
 function badge(id, ok) {
@@ -199,10 +181,12 @@ function saveYTClientId() {
 }
 
 function savePref() {
-  CONFIG.defaults.uploadPrivacy = document.getElementById('default-privacy').value;
-  CONFIG.defaults.imagesPerVideo = parseInt(document.getElementById('default-images').value);
-  CONFIG.defaults.imageStyle = document.getElementById('default-style').value;
-  localStorage.setItem('autotube_prefs', JSON.stringify(CONFIG.defaults));
+  const prefs = {
+    uploadPrivacy: document.getElementById('default-privacy').value,
+    imagesPerVideo: parseInt(document.getElementById('default-images').value),
+    imageStyle: document.getElementById('default-style').value,
+  };
+  localStorage.setItem('autotube_prefs', JSON.stringify(prefs));
 }
 
 let toastContainer = null;
