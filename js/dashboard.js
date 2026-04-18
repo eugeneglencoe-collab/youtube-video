@@ -1,6 +1,6 @@
 // ============================================================
-//  DASHBOARD — AutoTube v4
-//  Gemini 2.5 Flash + Unreal Speech + Replicate + YouTube
+//  DASHBOARD — AutoTube v5
+//  Gemini 2.5 Flash + Unreal Speech + Stability AI + YouTube
 // ============================================================
 
 const BACKEND = 'https://server-f28i.onrender.com';
@@ -11,7 +11,7 @@ const STATE = {
   credits: {
     gemini:       { used: 0, total: 1500,   unit: 'requêtes' },
     unrealSpeech: { used: 0, total: 250000, unit: 'chars' },
-    replicate:    { used: 0, total: 5000,   unit: 'cents' },
+    stability:    { used: 0, total: 25,     unit: 'crédits/jour' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
   ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
@@ -19,7 +19,6 @@ const STATE = {
   currentRun: JSON.parse(localStorage.getItem('current_run') || 'null'),
 };
 
-// NE PAS charger les crédits depuis localStorage pour éviter les conflits
 function saveState() {
   localStorage.setItem('autotube_videos', JSON.stringify(STATE.videos));
   localStorage.setItem('autotube_credits', JSON.stringify(STATE.credits));
@@ -29,9 +28,8 @@ function saveState() {
 handleOAuthRedirect();
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Recharger les crédits sauvegardés si structure correcte
   const saved = JSON.parse(localStorage.getItem('autotube_credits') || 'null');
-  if (saved && saved.gemini && saved.unrealSpeech && saved.replicate) {
+  if (saved && saved.gemini && saved.unrealSpeech && saved.stability) {
     STATE.credits = saved;
   }
   renderKPIs();
@@ -81,9 +79,9 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    gemini:       { name: 'Gemini API',     icon: '◆' },
-    unrealSpeech: { name: 'Unreal Speech',  icon: '◎' },
-    replicate:    { name: 'Replicate',      icon: '◈' },
+    gemini:       { name: 'Gemini API',    icon: '◆' },
+    unrealSpeech: { name: 'Unreal Speech', icon: '◎' },
+    stability:    { name: 'Stability AI',  icon: '◈' },
   };
 
   const html = Object.entries(labels).map(([key, label]) => {
@@ -91,9 +89,7 @@ function renderCredits() {
     const pct = Math.max(0, 100 - (c.used / c.total * 100));
     const cls = pct < CONFIG.alerts.dangerThreshold ? 'danger'
               : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
-    const remaining = c.unit === 'cents'
-      ? `$${((c.total - c.used)/100).toFixed(2)} restant`
-      : `${(c.total - c.used).toLocaleString()} ${c.unit} restant`;
+    const remaining = `${(c.total - c.used).toLocaleString()} ${c.unit} restant`;
 
     return `<div class="credit-item">
       <div class="credit-header">
@@ -122,7 +118,7 @@ async function refreshCredits() {
 const PIPELINE_STEPS_DEF = [
   { id: 'idea',    name: 'Génération du script',  icon: '◆', detail: 'Gemini 2.5 Flash via Render' },
   { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'Unreal Speech via Render' },
-  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Replicate SDXL via Render' },
+  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Stability AI via Render' },
   { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion' },
   { id: 'publish', name: 'Publication YouTube',    icon: '▶', detail: 'YouTube Data API v3' },
 ];
@@ -279,7 +275,7 @@ async function fetchYouTubeStats(token) {
 function openLaunch() {
   CONFIG.gemini.apiKey       = localStorage.getItem('gemini_api_key') || '';
   CONFIG.unrealSpeech.apiKey = localStorage.getItem('unrealspeech_api_key') || '';
-  CONFIG.replicate.apiKey    = localStorage.getItem('replicate_api_key') || '';
+  CONFIG.stability.apiKey    = localStorage.getItem('stability_api_key') || '';
   CONFIG.youtube.clientId    = localStorage.getItem('yt_client_id') || '';
 
   const missing = checkConfig();
@@ -317,17 +313,17 @@ async function launchPipeline() {
   renderPipelineSteps(run);
 
   try {
-    // ÉTAPE 1 — Script via Gemini
+    // ÉTAPE 1 — Script
     const script = await generateScript(topic, tags, duration);
     updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
     updateRun(run, 'voice', 'running', 'Unreal Speech en cours…');
 
-    // ÉTAPE 2 — Voix via Unreal Speech
+    // ÉTAPE 2 — Voix
     const audioUrl = await generateVoice(script.narration, voice);
     updateRun(run, 'voice', 'done', 'Audio généré ✓');
     updateRun(run, 'images', 'running', `0/${CONFIG.defaults.imagesPerVideo} images…`);
 
-    // ÉTAPE 3 — Images via Replicate
+    // ÉTAPE 3 — Images
     const images = await generateImages(script.imagePrompts, run);
     updateRun(run, 'images', 'done', `${images.length} images générées`);
     updateRun(run, 'edit', 'running', 'Assemblage…');
@@ -349,7 +345,7 @@ async function launchPipeline() {
       status: 'published',
       youtubeId: ytResult.id,
       views: 0,
-      cost: estimateCost(script),
+      cost: 0,
     };
     STATE.videos.unshift(videoEntry);
     saveState();
@@ -398,11 +394,7 @@ async function generateVoice(text, voiceName) {
   const resp = await fetch(`${BACKEND}/generate-voice`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text,
-      voiceId: voiceName,
-      apiKey: CONFIG.unrealSpeech.apiKey,
-    }),
+    body: JSON.stringify({ text, voiceId: voiceName, apiKey: CONFIG.unrealSpeech.apiKey }),
   });
   if (!resp.ok) {
     const e = await resp.json().catch(() => ({}));
@@ -418,11 +410,11 @@ async function generateImages(prompts, run) {
   const results = [];
   const total = Math.min(prompts.length, CONFIG.defaults.imagesPerVideo);
   for (let i = 0; i < total; i++) {
-    updateRun(run, 'images', 'running', `${i}/${total} images générées…`);
+    updateRun(run, 'images', 'running', `${i}/${total} images…`);
     const resp = await fetch(`${BACKEND}/generate-image`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompts[i], apiKey: CONFIG.replicate.apiKey }),
+      body: JSON.stringify({ prompt: prompts[i], apiKey: CONFIG.stability.apiKey }),
     });
     if (!resp.ok) {
       const e = await resp.json().catch(() => ({}));
@@ -430,7 +422,7 @@ async function generateImages(prompts, run) {
     }
     const data = await resp.json();
     results.push(data.url);
-    STATE.credits.replicate.used += 2;
+    STATE.credits.stability.used += 1;
     saveState(); renderCredits(); checkCreditAlerts();
   }
   return results;
@@ -485,11 +477,6 @@ function checkConfigAlerts() {
 
 // ── UTILS ──────────────────────────────────────────────────
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function estimateCost(script) {
-  const imageCost = CONFIG.defaults.imagesPerVideo * 0.002;
-  return parseFloat(imageCost.toFixed(4));
-}
 
 function set(id, val) {
   const el = document.getElementById(id);
