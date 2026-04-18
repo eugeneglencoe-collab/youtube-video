@@ -25,6 +25,9 @@ function saveState() {
 }
 
 // ── INIT ───────────────────────────────────────────────────
+// Gérer le redirect OAuth EN PREMIER, avant tout le reste
+handleOAuthRedirect();
+
 document.addEventListener('DOMContentLoaded', () => {
   renderKPIs();
   renderCredits();
@@ -32,7 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
   renderVideos();
   renderYouTube();
   checkConfigAlerts();
-  handleOAuthRedirect();
 });
 
 // ── KPIs ───────────────────────────────────────────────────
@@ -179,7 +181,14 @@ function openVideo(id) {
 
 // ── YOUTUBE ────────────────────────────────────────────────
 function renderYouTube() {
-  if (!STATE.ytConnected || !STATE.ytData) return;
+  const btn = document.getElementById('yt-connect-btn');
+
+  if (!STATE.ytConnected || !STATE.ytData) {
+    // Afficher le placeholder si pas connecté
+    if (btn) btn.textContent = 'Connecter →';
+    return;
+  }
+
   const d = STATE.ytData;
   document.getElementById('yt-stats').innerHTML = `
     <div class="yt-stats-grid">
@@ -204,7 +213,7 @@ function renderYouTube() {
         <div class="yt-stat-delta"><a href="https://studio.youtube.com" target="_blank" style="color:var(--yt-red)">Ouvrir Studio →</a></div>
       </div>
     </div>`;
-  document.getElementById('yt-connect-btn').textContent = '✓ Connecté';
+  if (btn) btn.textContent = '✓ Connecté';
 }
 
 async function connectYoutube() {
@@ -213,9 +222,13 @@ async function connectYoutube() {
     setTimeout(() => window.location.href = 'pages/settings.html', 1500);
     return;
   }
+
+  // redirect_uri = URL exacte de index.html
+  const redirectUri = 'https://eugeneglencoe-collab.github.io/youtube-video/index.html';
+
   const params = new URLSearchParams({
     client_id: CONFIG.youtube.clientId,
-    redirect_uri: window.location.origin + '/youtube-video/',
+    redirect_uri: redirectUri,
     response_type: 'token',
     scope: CONFIG.youtube.scopes.join(' '),
     include_granted_scopes: 'true',
@@ -224,16 +237,26 @@ async function connectYoutube() {
 }
 
 function handleOAuthRedirect() {
+  // Lire le hash AVANT qu'il soit effacé
   const hash = window.location.hash;
-  if (!hash) return;
+  if (!hash || hash.length < 2) return;
+
   const params = new URLSearchParams(hash.slice(1));
   const token = params.get('access_token');
   if (!token) return;
+
+  // Sauvegarder le token
   localStorage.setItem('yt_access_token', token);
   STATE.ytConnected = true;
-  window.location.hash = '';
-  showToast('YouTube connecté ! Chargement des stats…', 'success');
-  fetchYouTubeStats(token);
+
+  // Effacer le hash proprement sans rechargement
+  history.replaceState(null, '', window.location.pathname);
+
+  // Charger les stats après que le DOM soit prêt
+  document.addEventListener('DOMContentLoaded', () => {
+    showToast('YouTube connecté ! Chargement des stats…', 'success');
+    fetchYouTubeStats(token);
+  });
 }
 
 async function fetchYouTubeStats(token) {
@@ -249,12 +272,23 @@ async function fetchYouTubeStats(token) {
       localStorage.setItem('yt_data', JSON.stringify(STATE.ytData));
       renderYouTube();
       renderKPIs();
+    } else {
+      showToast('Aucune chaîne YouTube trouvée sur ce compte', 'warn');
     }
-  } catch(e) { showToast('Erreur chargement YouTube', 'error'); }
+  } catch(e) {
+    showToast('Erreur chargement YouTube', 'error');
+    console.error(e);
+  }
 }
 
 // ── LAUNCH MODAL ───────────────────────────────────────────
 function openLaunch() {
+  // Recharger les clés depuis localStorage au cas où elles ont été ajoutées
+  CONFIG.gemini.apiKey  = localStorage.getItem('gemini_api_key') || '';
+  CONFIG.openai.apiKey  = localStorage.getItem('openai_api_key') || '';
+  CONFIG.replicate.apiKey = localStorage.getItem('replicate_api_key') || '';
+  CONFIG.youtube.clientId = localStorage.getItem('yt_client_id') || '';
+
   const missing = checkConfig();
   if (missing.length > 0) {
     showToast(`Configure d'abord : ${missing.join(', ')}`, 'warn');
@@ -489,8 +523,8 @@ function checkConfigAlerts() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function estimateCost(script) {
-  const voiceCost  = (script.narration.length / 1000) * 0.015;
-  const imageCost  = CONFIG.defaults.imagesPerVideo * 0.002;
+  const voiceCost = (script.narration.length / 1000) * 0.015;
+  const imageCost = CONFIG.defaults.imagesPerVideo * 0.002;
   return parseFloat((voiceCost + imageCost).toFixed(4));
 }
 
