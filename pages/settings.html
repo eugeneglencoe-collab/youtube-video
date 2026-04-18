@@ -86,6 +86,24 @@
       </div>
     </div>
 
+    <!-- STABILITY AI -->
+    <div class="panel settings-card">
+      <div class="panel-header">
+        <span class="panel-title">◈ Stability AI</span>
+        <span class="panel-badge" id="stability-badge">Non configuré</span>
+      </div>
+      <div class="settings-body">
+        <div class="form-group">
+          <label class="form-label">Clé API <a href="https://platform.stability.ai/account/keys" target="_blank" class="form-link">platform.stability.ai →</a></label>
+          <div class="input-row">
+            <input class="form-input" type="password" id="stability-key" placeholder="sk-…">
+            <button class="btn-save" onclick="saveKey('stability', 'stability-key', 'stability-badge')">Sauvegarder</button>
+          </div>
+        </div>
+        <div class="settings-info">Gratuit : 25 crédits/jour · ~4 crédits par image</div>
+      </div>
+    </div>
+
     <!-- YOUTUBE -->
     <div class="panel settings-card">
       <div class="panel-header">
@@ -153,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem('gemini_api_key'))       { document.getElementById('gemini-key').value = '••••••••'; badge('gemini-badge', true); }
   if (localStorage.getItem('unrealspeech_api_key')) { document.getElementById('unrealspeech-key').value = '••••••••'; badge('unrealspeech-badge', true); }
   if (localStorage.getItem('replicate_api_key'))    { document.getElementById('replicate-key').value = '••••••••'; badge('replicate-badge', true); }
+  if (localStorage.getItem('stability_api_key'))    { document.getElementById('stability-key').value = '••••••••'; badge('stability-badge', true); }
   if (localStorage.getItem('yt_client_id'))         { document.getElementById('yt-client-id').value = localStorage.getItem('yt_client_id'); badge('yt-badge', true); }
 });
 
