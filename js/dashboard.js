@@ -1,6 +1,6 @@
 // ============================================================
-//  DASHBOARD — AutoTube
-//  Tous les appels API passent par le backend Render
+//  DASHBOARD — AutoTube v3
+//  Gemini 2.5 Flash + OpenAI TTS + Replicate + YouTube
 // ============================================================
 
 const BACKEND = 'https://server-f28i.onrender.com';
@@ -9,9 +9,9 @@ const BACKEND = 'https://server-f28i.onrender.com';
 const STATE = {
   videos: JSON.parse(localStorage.getItem('autotube_videos') || '[]'),
   credits: JSON.parse(localStorage.getItem('autotube_credits') || 'null') || {
-    gemini:      { used: 0, total: 1500,  unit: 'requêtes' },
-    elevenlabs:  { used: 0, total: 10000, unit: 'chars' },
-    replicate:   { used: 0, total: 5000,  unit: 'cents' },
+    gemini:    { used: 0, total: 1500,  unit: 'requêtes' },
+    openai:    { used: 0, total: 50000, unit: 'chars' },
+    replicate: { used: 0, total: 5000,  unit: 'cents' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
   ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
@@ -72,9 +72,9 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    gemini:     { name: 'Gemini API',  icon: '◆' },
-    elevenlabs: { name: 'ElevenLabs',  icon: '◎' },
-    replicate:  { name: 'Replicate',   icon: '◈' },
+    gemini:    { name: 'Gemini API',  icon: '◆' },
+    openai:    { name: 'OpenAI TTS',  icon: '◎' },
+    replicate: { name: 'Replicate',   icon: '◈' },
   };
 
   const html = Object.entries(STATE.credits).map(([key, c]) => {
@@ -102,17 +102,6 @@ function renderCredits() {
 
 async function refreshCredits() {
   showToast('Actualisation des crédits…', 'info');
-  try {
-    const r = await fetch(`${BACKEND}/elevenlabs-quota`, {
-      headers: { 'xi-api-key': CONFIG.elevenlabs.apiKey }
-    });
-    if (r.ok) {
-      const d = await r.json();
-      STATE.credits.elevenlabs.used = d.used;
-      STATE.credits.elevenlabs.total = d.total;
-    }
-  } catch(e) { console.warn('ElevenLabs quota:', e); }
-
   saveState();
   renderCredits();
   renderKPIs();
@@ -121,8 +110,8 @@ async function refreshCredits() {
 
 // ── PIPELINE STEPS ─────────────────────────────────────────
 const PIPELINE_STEPS_DEF = [
-  { id: 'idea',    name: 'Génération du script',  icon: '◆', detail: 'Gemini 1.5 Flash via Render' },
-  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'ElevenLabs via Render' },
+  { id: 'idea',    name: 'Génération du script',  icon: '◆', detail: 'Gemini 2.5 Flash via Render' },
+  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'OpenAI TTS via Render' },
   { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Replicate SDXL via Render' },
   { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion' },
   { id: 'publish', name: 'Publication YouTube',    icon: '▶', detail: 'YouTube Data API v3' },
@@ -221,7 +210,7 @@ function renderYouTube() {
 async function connectYoutube() {
   if (!CONFIG.youtube.clientId) {
     showToast('Configure d\'abord ton Client ID YouTube dans Config', 'warn');
-    setTimeout(() => window.location.href = '../pages/settings.html', 1500);
+    setTimeout(() => window.location.href = 'pages/settings.html', 1500);
     return;
   }
   const params = new URLSearchParams({
@@ -295,28 +284,28 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
+  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini 2.5 Flash génère le script…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
 
   try {
-    // ÉTAPE 1 — Script via backend Render → Gemini
+    // ÉTAPE 1 — Script via Gemini
     const script = await generateScript(topic, tags, duration);
     updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
-    updateRun(run, 'voice', 'running', 'ElevenLabs en cours…');
+    updateRun(run, 'voice', 'running', 'OpenAI TTS en cours…');
 
-    // ÉTAPE 2 — Voix via backend Render → ElevenLabs
+    // ÉTAPE 2 — Voix via OpenAI TTS
     const audioBlob = await generateVoice(script.narration, voice);
     updateRun(run, 'voice', 'done', `Audio ${Math.round(audioBlob.size/1024)} KB`);
     updateRun(run, 'images', 'running', `0/${CONFIG.defaults.imagesPerVideo} images…`);
 
-    // ÉTAPE 3 — Images via backend Render → Replicate
+    // ÉTAPE 3 — Images via Replicate
     const images = await generateImages(script.imagePrompts, run);
     updateRun(run, 'images', 'done', `${images.length} images générées`);
     updateRun(run, 'edit', 'running', 'Assemblage…');
 
-    // ÉTAPE 4 — Assemblage (simulation — Remotion à connecter)
+    // ÉTAPE 4 — Assemblage
     await sleep(1500);
     updateRun(run, 'edit', 'done', 'Vidéo assemblée');
     updateRun(run, 'publish', 'running', 'Upload YouTube…');
@@ -360,7 +349,7 @@ function updateRun(run, step, status, detail) {
   renderPipelineSteps(run);
 }
 
-// ── API CALLS → BACKEND RENDER ─────────────────────────────
+// ── API CALLS ──────────────────────────────────────────────
 
 async function generateScript(topic, tags, duration) {
   const resp = await fetch(`${BACKEND}/generate-script`, {
@@ -378,8 +367,6 @@ async function generateScript(topic, tags, duration) {
   }
 
   const data = await resp.json();
-
-  // Mise à jour crédits Gemini (1 requête par script)
   STATE.credits.gemini.used += 1;
   saveState();
   renderCredits();
@@ -389,14 +376,13 @@ async function generateScript(topic, tags, duration) {
 }
 
 async function generateVoice(text, voiceName) {
-  const voiceId = CONFIG.elevenlabs.voices[voiceName] || CONFIG.elevenlabs.voices['Neutre (Adam)'];
-
   const resp = await fetch(`${BACKEND}/generate-voice`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      text, voiceId,
-      apiKey: CONFIG.elevenlabs.apiKey,
+      text,
+      voiceId: voiceName,
+      apiKey: CONFIG.openai.apiKey,
     }),
   });
 
@@ -405,7 +391,7 @@ async function generateVoice(text, voiceName) {
     throw new Error(`Voix : ${e.error || resp.status}`);
   }
 
-  STATE.credits.elevenlabs.used += text.length;
+  STATE.credits.openai.used += text.length;
   saveState();
   renderCredits();
   checkCreditAlerts();
@@ -503,8 +489,8 @@ function checkConfigAlerts() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function estimateCost(script) {
-  const voiceCost = (script.narration.length / 1000) * 0.03;
-  const imageCost = CONFIG.defaults.imagesPerVideo * 0.002;
+  const voiceCost  = (script.narration.length / 1000) * 0.015;
+  const imageCost  = CONFIG.defaults.imagesPerVideo * 0.002;
   return parseFloat((voiceCost + imageCost).toFixed(4));
 }
 
