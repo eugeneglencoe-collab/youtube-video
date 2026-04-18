@@ -369,7 +369,7 @@ async function generateScript(topic, tags, duration) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       topic, tags, duration,
-      apiKey: CONFIG.claude.apiKey,
+      apiKey: CONFIG.gemini.apiKey,
     }),
   });
 
