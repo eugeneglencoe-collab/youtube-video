@@ -1,6 +1,6 @@
 // ============================================================
-//  DASHBOARD — AutoTube v5
-//  Gemini 2.5 Flash + Unreal Speech + Stability AI + YouTube
+//  DASHBOARD — AutoTube v8
+//  Gemini 2.5 Flash + Unreal Speech + Pollinations AI + YouTube
 // ============================================================
 
 const BACKEND = 'https://server-f28i.onrender.com';
@@ -11,7 +11,7 @@ const STATE = {
   credits: {
     gemini:       { used: 0, total: 1500,   unit: 'requêtes' },
     unrealSpeech: { used: 0, total: 250000, unit: 'chars' },
-    stability:    { used: 0, total: 25,     unit: 'crédits/jour' },
+    pollinations: { used: 0, total: 99999,  unit: 'images' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
   ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
@@ -29,7 +29,7 @@ handleOAuthRedirect();
 
 document.addEventListener('DOMContentLoaded', () => {
   const saved = JSON.parse(localStorage.getItem('autotube_credits') || 'null');
-  if (saved && saved.gemini && saved.unrealSpeech && saved.stability) {
+  if (saved && saved.gemini && saved.unrealSpeech && saved.pollinations) {
     STATE.credits = saved;
   }
   renderKPIs();
@@ -79,9 +79,9 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    gemini:       { name: 'Gemini API',    icon: '◆' },
-    unrealSpeech: { name: 'Unreal Speech', icon: '◎' },
-    stability:    { name: 'Stability AI',  icon: '◈' },
+    gemini:       { name: 'Gemini API',      icon: '◆' },
+    unrealSpeech: { name: 'Unreal Speech',   icon: '◎' },
+    pollinations: { name: 'Pollinations AI', icon: '◈' },
   };
 
   const html = Object.entries(labels).map(([key, label]) => {
@@ -94,12 +94,12 @@ function renderCredits() {
     return `<div class="credit-item">
       <div class="credit-header">
         <span class="credit-name">${label.icon} ${label.name}</span>
-        <span class="credit-value ${cls}">${Math.round(pct)}%</span>
+        <span class="credit-value ${cls}">${key === 'pollinations' ? '∞ Gratuit' : Math.round(pct)+'%'}</span>
       </div>
       <div class="credit-bar">
-        <div class="credit-fill ${cls}" style="width:${pct}%"></div>
+        <div class="credit-fill ${cls}" style="width:${key === 'pollinations' ? 100 : pct}%"></div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">${remaining}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">${key === 'pollinations' ? 'Illimité · aucune clé requise' : remaining}</div>
     </div>`;
   }).join('');
 
@@ -118,9 +118,9 @@ async function refreshCredits() {
 const PIPELINE_STEPS_DEF = [
   { id: 'idea',    name: 'Génération du script',  icon: '◆', detail: 'Gemini 2.5 Flash via Render' },
   { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'Unreal Speech via Render' },
-  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Stability AI via Render' },
-  { id: 'edit',    name: 'Assemblage vidéo',        icon: '▦', detail: 'Remotion' },
-  { id: 'publish', name: 'Publication YouTube',    icon: '▶', detail: 'YouTube Data API v3' },
+  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Pollinations AI — gratuit' },
+  { id: 'edit',    name: 'Assemblage + Publication', icon: '▦', detail: 'ffmpeg + YouTube API' },
+  { id: 'publish', name: 'Vidéo publiée',          icon: '▶', detail: 'YouTube Shorts' },
 ];
 
 function renderPipelineSteps(runData) {
@@ -275,10 +275,14 @@ async function fetchYouTubeStats(token) {
 function openLaunch() {
   CONFIG.gemini.apiKey       = localStorage.getItem('gemini_api_key') || '';
   CONFIG.unrealSpeech.apiKey = localStorage.getItem('unrealspeech_api_key') || '';
-  CONFIG.stability.apiKey    = localStorage.getItem('stability_api_key') || '';
   CONFIG.youtube.clientId    = localStorage.getItem('yt_client_id') || '';
 
-  const missing = checkConfig();
+  // Pollinations n'a pas besoin de clé
+  const missing = [];
+  if (!CONFIG.gemini.apiKey)      missing.push('Gemini');
+  if (!CONFIG.unrealSpeech.apiKey) missing.push('Unreal Speech');
+  if (!CONFIG.youtube.clientId)   missing.push('YouTube');
+
   if (missing.length > 0) {
     showToast(`Configure d'abord : ${missing.join(', ')}`, 'warn');
     setTimeout(() => window.location.href = 'pages/settings.html', 1500);
@@ -307,7 +311,7 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini 2.5 Flash génère le script…' };
+  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
@@ -315,50 +319,50 @@ async function launchPipeline() {
   try {
     // ÉTAPE 1 — Script
     const script = await generateScript(topic, tags, duration);
-    console.log('SCRIPT COMPLET:', JSON.stringify(script, null, 2)); // ← debug
     updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
+    updateRun(run, 'voice', 'running', 'Unreal Speech en cours…');
 
     // ÉTAPE 2 — Voix
     const audioUrl = await generateVoice(script.narration, voice);
     updateRun(run, 'voice', 'done', 'Audio généré ✓');
-    updateRun(run, 'images', 'running', `0/${CONFIG.defaults.imagesPerVideo} images…`);
+    updateRun(run, 'images', 'running', '0/4 images…');
 
-    // ÉTAPE 3 — Images
-    const images = await generateImages(script.imagePrompts, run);
-    updateRun(run, 'images', 'done', `${images.length} images générées`);
-    updateRun(run, 'edit', 'running', 'Assemblage + upload YouTube…');
+    // ÉTAPE 3 — Images (URLs Pollinations — pas de base64 !)
+    const imageUrls = await generateImageUrls(script.imagePrompts, run);
+    updateRun(run, 'images', 'done', `${imageUrls.length} images générées`);
+    updateRun(run, 'edit', 'running', 'Assemblage ffmpeg + upload YouTube…');
 
-    // ÉTAPES 4 & 5 — Assemblage ffmpeg + Publication YouTube
+    // ÉTAPES 4 & 5 — Assemblage + Publication (tout côté serveur)
     const ytToken = localStorage.getItem('yt_access_token');
-    const prefs   = JSON.parse(localStorage.getItem('autotube_prefs') || '{}');
+
     const assembleResp = await fetch(`${BACKEND}/assemble-and-publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        images,
+        imageUrls,  // ← URLs simples, pas de base64
         audioUrl,
         script,
         tags,
-        privacy: prefs.uploadPrivacy || 'private',
         ytToken,
       }),
     });
+
     if (!assembleResp.ok) {
       const e = await assembleResp.json().catch(() => ({}));
       throw new Error(`Assemblage : ${e.error || assembleResp.status}`);
     }
+
     const assembleData = await assembleResp.json();
     updateRun(run, 'edit', 'done', 'Vidéo MP4 assemblée ✓');
-    updateRun(run, 'publish', 'done', `ID : ${assembleData.youtubeId || '—'}`);
+    updateRun(run, 'publish', 'done', `youtu.be/${assembleData.youtubeId}`);
 
-    const ytResult = { id: assembleData.youtubeId };
     const videoEntry = {
       id: runId,
       title: script.title,
       description: script.description,
       date: new Date().toISOString(),
       status: 'published',
-      youtubeId: ytResult.id,
+      youtubeId: assembleData.youtubeId,
       views: 0,
       cost: 0,
     };
@@ -366,7 +370,7 @@ async function launchPipeline() {
     saveState();
     renderVideos();
     renderKPIs();
-    showToast(`✓ Vidéo publiée : "${script.title}"`, 'success');
+    showToast(`✓ Short publié : "${script.title}"`, 'success');
 
   } catch(err) {
     const runningStep = PIPELINE_STEPS_DEF.find(s => run[s.id] === 'running');
@@ -401,7 +405,7 @@ async function generateScript(topic, tags, duration) {
   }
   const data = await resp.json();
   STATE.credits.gemini.used += 1;
-  saveState(); renderCredits(); checkCreditAlerts();
+  saveState(); renderCredits();
   return data.script;
 }
 
@@ -417,65 +421,39 @@ async function generateVoice(text, voiceName) {
   }
   const data = await resp.json();
   STATE.credits.unrealSpeech.used += text.length;
-  saveState(); renderCredits(); checkCreditAlerts();
+  saveState(); renderCredits();
   return data.audioUrl;
 }
 
-async function generateImages(prompts, run) {
-  const results = [];
-  const total = Math.min(prompts.length, CONFIG.defaults.imagesPerVideo);
+// Génère des URLs Pollinations directement — aucun appel au backend, aucun base64
+async function generateImageUrls(prompts, run) {
+  const urls = [];
+  const total = Math.min(prompts.length, 4);
+
   for (let i = 0; i < total; i++) {
     updateRun(run, 'images', 'running', `${i}/${total} images…`);
 
-    const resp = await fetch(`${BACKEND}/generate-image`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: prompts[i], apiKey: CONFIG.stability.apiKey }),
-    });
+    const encodedPrompt = encodeURIComponent(
+      `${prompts[i]}, vertical 9:16, cinematic, high quality, 4k`
+    );
+    // URL Pollinations directe — le serveur la télécharge lui-même
+    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=768&height=1344&nologo=true&enhance=true&seed=${Date.now()+i}`;
+    urls.push(url);
 
-    if (!resp.ok) {
-      const e = await resp.json().catch(() => ({}));
-      throw new Error(`Image ${i+1} : ${e.error || resp.status}`);
-    }
-    const data = await resp.json();
-    results.push(data.url);
-    STATE.credits.stability.used += 1;
-    saveState(); renderCredits(); checkCreditAlerts();
+    // Délai pour éviter le rate limit
+    await new Promise(r => setTimeout(r, 2000));
   }
-  return results;
-}
 
-async function publishToYouTube(script, tags) {
-  const token = localStorage.getItem('yt_access_token');
-  if (!token) throw new Error('YouTube non connecté — connecte ta chaîne dans le dashboard');
-  const meta = {
-    snippet: {
-      title: script.title,
-      description: script.description,
-      tags: [...(script.tags || []), ...tags],
-      categoryId: '22',
-      defaultLanguage: 'fr',
-    },
-    status: { privacyStatus: CONFIG.defaults.uploadPrivacy },
-  };
-  const r = await fetch(
-    'https://www.googleapis.com/youtube/v3/videos?part=snippet,status',
-    {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(meta),
-    }
-  );
-  if (!r.ok) {
-    const e = await r.json();
-    throw new Error(`YouTube : ${e.error?.message || r.status}`);
-  }
-  return await r.json();
+  STATE.credits.pollinations.used += total;
+  saveState(); renderCredits();
+  return urls;
 }
 
 // ── ALERTES ────────────────────────────────────────────────
 function checkCreditAlerts() {
-  Object.entries(STATE.credits).forEach(([key, c]) => {
+  ['gemini', 'unrealSpeech'].forEach(key => {
+    const c = STATE.credits[key];
+    if (!c) return;
     const pct = 100 - (c.used / c.total * 100);
     if (pct < CONFIG.alerts.dangerThreshold) {
       showToast(`⚠ ${key} : crédits critiques (${Math.round(pct)}% restant)`, 'error');
@@ -486,15 +464,16 @@ function checkCreditAlerts() {
 }
 
 function checkConfigAlerts() {
-  const missing = checkConfig();
+  const missing = [];
+  if (!localStorage.getItem('gemini_api_key'))       missing.push('Gemini');
+  if (!localStorage.getItem('unrealspeech_api_key')) missing.push('Unreal Speech');
+  if (!localStorage.getItem('yt_client_id'))         missing.push('YouTube');
   if (missing.length > 0) {
     showToast(`Clés manquantes : ${missing.join(', ')} → va dans Config`, 'warn');
   }
 }
 
 // ── UTILS ──────────────────────────────────────────────────
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
 function set(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
