@@ -11,18 +11,6 @@
 <body>
 <div class="bg-grid"></div>
 <div class="bg-glow"></div>
-  <div class="settings-section">
-    <h3>Configuration de l'IA</h3>
-    <p>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</p>
-    
-    <div class="form-group">
-        <label for="anthropic-key">Clé API Anthropic :</label>
-        <input type="password" 
-               id="anthropic-key" 
-               placeholder="sk-ant-api03-..." 
-               class="form-input">
-        <small>Votre clé est stockée localement et n'est jamais transmise à nos serveurs.</small>
-    </div>
 
     <button id="save-settings" class="btn-primary">Enregistrer les modifications</button>
 </div>
@@ -47,6 +35,24 @@
   </header>
 
   <div class="settings-grid">
+
+    <!-- ANTHROPIC (Claude Vision — Agent IA) -->
+    <div class="panel settings-card">
+      <div class="panel-header">
+        <span class="panel-title">⬢ Anthropic (Agent IA)</span>
+        <span class="panel-badge" id="anthropic-badge">Non configuré</span>
+      </div>
+      <div class="settings-body">
+        <div class="form-group">
+          <label class="form-label">Clé API <a href="https://console.anthropic.com" target="_blank" class="form-link">console.anthropic.com →</a></label>
+          <div class="input-row">
+            <input class="form-input" type="password" id="anthropic-key" placeholder="sk-ant-…">
+            <button class="btn-save" onclick="saveKey('anthropic', 'anthropic-key', 'anthropic-badge')">Sauvegarder</button>
+          </div>
+        </div>
+        <div class="settings-info">Claude Vision · Analyse qualité YouTube Shorts · Requis pour l'Agent IA</div>
+      </div>
+    </div>
 
     <!-- GEMINI -->
     <div class="panel settings-card">
