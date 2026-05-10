@@ -1,6 +1,6 @@
 // ============================================================
-//  DASHBOARD — AutoTube v8
-//  Gemini 2.5 Flash + Unreal Speech + Pollinations AI + YouTube
+//  DASHBOARD — AutoTube v12
+//  Gemini 2.5 Flash + Unreal Speech + Reddit Images + YouTube
 // ============================================================
 
 const BACKEND = 'https://server-f28i.onrender.com';
@@ -11,7 +11,7 @@ const STATE = {
   credits: {
     gemini:       { used: 0, total: 1500,   unit: 'requêtes' },
     unrealSpeech: { used: 0, total: 250000, unit: 'chars' },
-    pollinations: { used: 0, total: 99999,  unit: 'images' },
+    reddit:       { used: 0, total: 99999,  unit: 'images' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
   ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
@@ -29,8 +29,8 @@ handleOAuthRedirect();
 
 document.addEventListener('DOMContentLoaded', () => {
   const saved = JSON.parse(localStorage.getItem('autotube_credits') || 'null');
-  if (saved && saved.gemini && saved.unrealSpeech && saved.pollinations) {
-    STATE.credits = saved;
+  if (saved && saved.gemini && saved.unrealSpeech) {
+    STATE.credits = { ...STATE.credits, ...saved };
   }
   renderKPIs();
   renderCredits();
@@ -42,17 +42,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── KPIs ───────────────────────────────────────────────────
 function renderKPIs() {
-  const published = STATE.videos.filter(v => v.status === 'published').length;
+  const published  = STATE.videos.filter(v => v.status === 'published').length;
   const totalViews = STATE.videos.reduce((s, v) => s + (v.views || 0), 0);
-  const totalCost  = STATE.videos.reduce((s, v) => s + (v.cost || 0), 0);
+  const totalCost  = STATE.videos.reduce((s, v) => s + (v.cost  || 0), 0);
   const avgCost    = published > 0 ? (totalCost / published).toFixed(3) : '—';
 
   set('kpi-published', published || '0');
-  set('kpi-views', totalViews > 1000 ? (totalViews/1000).toFixed(1)+'k' : totalViews || '0');
-  set('kpi-cost', published > 0 ? `$${avgCost}` : '—');
+  set('kpi-views',     totalViews > 1000 ? (totalViews / 1000).toFixed(1) + 'k' : totalViews || '0');
+  set('kpi-cost',      published > 0 ? `$${avgCost}` : '—');
 
-  const pcts = Object.values(STATE.credits).map(c => 100 - (c.used/c.total*100));
-  const avgPct = Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length);
+  const pcts   = Object.values(STATE.credits).map(c => 100 - (c.used / c.total * 100));
+  const avgPct = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
   set('kpi-credits', `${avgPct}%`);
 
   if (avgPct < CONFIG.alerts.dangerThreshold) {
@@ -65,12 +65,12 @@ function renderKPIs() {
     set('kpi-credits-delta', 'Multi-services');
   }
 
-  const week = STATE.videos.filter(v => (Date.now() - new Date(v.date)) < 7*24*3600*1000).length;
+  const week = STATE.videos.filter(v => (Date.now() - new Date(v.date)) < 7 * 24 * 3600 * 1000).length;
   set('kpi-pub-delta', week > 0 ? `+${week} cette semaine` : 'Aucune cette semaine');
 
   if (STATE.ytData) {
     set('kpi-views', STATE.ytData.viewCount > 1000
-      ? (STATE.ytData.viewCount/1000).toFixed(1)+'k'
+      ? (STATE.ytData.viewCount / 1000).toFixed(1) + 'k'
       : STATE.ytData.viewCount);
     set('kpi-views-delta', `${STATE.ytData.subscriberCount} abonnés`);
   }
@@ -79,27 +79,29 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    gemini:       { name: 'Gemini API',      icon: '◆' },
-    unrealSpeech: { name: 'Unreal Speech',   icon: '◎' },
-    pollinations: { name: 'Pollinations AI', icon: '◈' },
+    gemini:       { name: 'Gemini API',    icon: '◆' },
+    unrealSpeech: { name: 'Unreal Speech', icon: '◎' },
+    reddit:       { name: 'Reddit Images', icon: '◈' },
   };
 
   const html = Object.entries(labels).map(([key, label]) => {
-    const c = STATE.credits[key] || { used: 0, total: 1, unit: '' };
+    const c   = STATE.credits[key] || { used: 0, total: 1, unit: '' };
     const pct = Math.max(0, 100 - (c.used / c.total * 100));
     const cls = pct < CONFIG.alerts.dangerThreshold ? 'danger'
               : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
-    const remaining = `${(c.total - c.used).toLocaleString()} ${c.unit} restant`;
+    const isReddit = key === 'reddit';
 
     return `<div class="credit-item">
       <div class="credit-header">
         <span class="credit-name">${label.icon} ${label.name}</span>
-        <span class="credit-value ${cls}">${key === 'pollinations' ? '∞ Gratuit' : Math.round(pct)+'%'}</span>
+        <span class="credit-value ${cls}">${isReddit ? '∞ Gratuit' : Math.round(pct) + '%'}</span>
       </div>
       <div class="credit-bar">
-        <div class="credit-fill ${cls}" style="width:${key === 'pollinations' ? 100 : pct}%"></div>
+        <div class="credit-fill ${cls}" style="width:${isReddit ? 100 : pct}%"></div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:4px">${key === 'pollinations' ? 'Illimité · aucune clé requise' : remaining}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">
+        ${isReddit ? 'Images réelles · API publique' : `${(c.total - c.used).toLocaleString()} ${c.unit} restant`}
+      </div>
     </div>`;
   }).join('');
 
@@ -116,21 +118,21 @@ async function refreshCredits() {
 
 // ── PIPELINE STEPS ─────────────────────────────────────────
 const PIPELINE_STEPS_DEF = [
-  { id: 'idea',    name: 'Génération du script',  icon: '◆', detail: 'Gemini 2.5 Flash via Render' },
-  { id: 'voice',   name: 'Synthèse vocale',        icon: '◎', detail: 'Unreal Speech via Render' },
-  { id: 'images',  name: "Génération d'images",    icon: '◈', detail: 'Pollinations AI — gratuit' },
-  { id: 'edit',    name: 'Assemblage + Publication', icon: '▦', detail: 'ffmpeg + YouTube API' },
-  { id: 'publish', name: 'Vidéo publiée',          icon: '▶', detail: 'YouTube Shorts' },
+  { id: 'idea',    name: 'Génération du script',    icon: '◆', detail: 'Gemini 2.5 Flash via Render' },
+  { id: 'voice',   name: 'Synthèse vocale',          icon: '◎', detail: 'Unreal Speech — accent FR' },
+  { id: 'images',  name: 'Recherche images Reddit',  icon: '◈', detail: 'API publique Reddit — gratuit' },
+  { id: 'edit',    name: 'Assemblage + Publication',  icon: '▦', detail: 'ffmpeg Ken Burns + YouTube API' },
+  { id: 'publish', name: 'Vidéo publiée',            icon: '▶', detail: 'YouTube Shorts' },
 ];
 
 function renderPipelineSteps(runData) {
   const steps = runData || STATE.currentRun;
-  const html = PIPELINE_STEPS_DEF.map(s => {
-    const st = steps ? steps[s.id] : 'idle';
-    const cls = st === 'done' ? 'done' : st === 'running' ? 'running' : st === 'error' ? 'error' : '';
-    const ico = st === 'done' ? '✓' : st === 'running' ? '…' : st === 'error' ? '✕' : s.icon;
-    const detail = steps && steps[s.id+'_detail'] ? steps[s.id+'_detail'] : s.detail;
-    const time   = steps && steps[s.id+'_time']   ? steps[s.id+'_time']   : '';
+  const html  = PIPELINE_STEPS_DEF.map(s => {
+    const st     = steps ? steps[s.id] : 'idle';
+    const cls    = st === 'done' ? 'done' : st === 'running' ? 'running' : st === 'error' ? 'error' : '';
+    const ico    = st === 'done' ? '✓'   : st === 'running' ? '…'       : st === 'error' ? '✕'    : s.icon;
+    const detail = steps && steps[s.id + '_detail'] ? steps[s.id + '_detail'] : s.detail;
+    const time   = steps && steps[s.id + '_time']   ? steps[s.id + '_time']   : '';
     return `<div class="pipeline-step">
       <div class="step-icon ${cls}">${ico}</div>
       <div class="step-info">
@@ -140,17 +142,18 @@ function renderPipelineSteps(runData) {
       <div class="step-time">${time}</div>
     </div>`;
   }).join('');
+
   document.getElementById('pipeline-steps').innerHTML = html;
 
   const badge = document.getElementById('pipeline-status-badge');
   if (!steps) {
     badge.textContent = 'En attente'; badge.className = 'panel-badge';
   } else if (Object.values(steps).includes('running')) {
-    badge.textContent = 'En cours'; badge.className = 'panel-badge running';
+    badge.textContent = 'En cours';   badge.className = 'panel-badge running';
   } else if (Object.values(steps).includes('error')) {
-    badge.textContent = 'Erreur'; badge.className = 'panel-badge error';
+    badge.textContent = 'Erreur';     badge.className = 'panel-badge error';
   } else {
-    badge.textContent = 'Terminé'; badge.className = 'panel-badge running';
+    badge.textContent = 'Terminé';    badge.className = 'panel-badge running';
   }
 }
 
@@ -163,16 +166,16 @@ function renderVideos() {
       </div>`;
     return;
   }
-  const html = STATE.videos.slice(0,6).map(v => {
-    const statusLabel = { published:'Publié', processing:'En cours', error:'Erreur', draft:'Brouillon' };
-    const date = new Date(v.date).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+  const html = STATE.videos.slice(0, 6).map(v => {
+    const statusLabel = { published: 'Publié', processing: 'En cours', error: 'Erreur', draft: 'Brouillon' };
+    const date = new Date(v.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
     return `<div class="video-item" onclick="openVideo('${v.id}')">
       <div class="video-thumb">${v.thumb ? `<img src="${v.thumb}" alt="">` : '▶'}</div>
       <div class="video-info">
         <div class="video-title">${v.title || 'Sans titre'}</div>
-        <div class="video-meta">${date} · ${v.views||0} vues · $${(v.cost||0).toFixed(3)}</div>
+        <div class="video-meta">${date} · ${v.views || 0} vues · $${(v.cost || 0).toFixed(3)}</div>
       </div>
-      <span class="video-status ${v.status}">${statusLabel[v.status]||v.status}</span>
+      <span class="video-status ${v.status}">${statusLabel[v.status] || v.status}</span>
     </div>`;
   }).join('');
   document.getElementById('videos-list').innerHTML = html;
@@ -195,23 +198,25 @@ function renderYouTube() {
     <div class="yt-stats-grid">
       <div class="yt-stat-item">
         <div class="yt-stat-label">Abonnés</div>
-        <div class="yt-stat-value">${parseInt(d.subscriberCount||0).toLocaleString()}</div>
+        <div class="yt-stat-value">${parseInt(d.subscriberCount || 0).toLocaleString()}</div>
         <div class="yt-stat-delta up">Chaîne connectée</div>
       </div>
       <div class="yt-stat-item">
         <div class="yt-stat-label">Vues totales</div>
-        <div class="yt-stat-value">${parseInt(d.viewCount||0).toLocaleString()}</div>
+        <div class="yt-stat-value">${parseInt(d.viewCount || 0).toLocaleString()}</div>
         <div class="yt-stat-delta">Depuis création</div>
       </div>
       <div class="yt-stat-item">
         <div class="yt-stat-label">Vidéos</div>
-        <div class="yt-stat-value">${d.videoCount||0}</div>
+        <div class="yt-stat-value">${d.videoCount || 0}</div>
         <div class="yt-stat-delta">Publiées</div>
       </div>
       <div class="yt-stat-item">
         <div class="yt-stat-label">Chaîne</div>
-        <div class="yt-stat-value" style="font-size:14px;line-height:1.3">${d.title||'—'}</div>
-        <div class="yt-stat-delta"><a href="https://studio.youtube.com" target="_blank" style="color:var(--yt-red)">Ouvrir Studio →</a></div>
+        <div class="yt-stat-value" style="font-size:14px;line-height:1.3">${d.title || '—'}</div>
+        <div class="yt-stat-delta">
+          <a href="https://studio.youtube.com" target="_blank" style="color:var(--yt-red)">Ouvrir Studio →</a>
+        </div>
       </div>
     </div>`;
   if (btn) btn.textContent = '✓ Connecté';
@@ -225,10 +230,10 @@ async function connectYoutube() {
   }
   const redirectUri = 'https://eugeneglencoe-collab.github.io/youtube-video/index.html';
   const params = new URLSearchParams({
-    client_id: CONFIG.youtube.clientId,
-    redirect_uri: redirectUri,
-    response_type: 'token',
-    scope: CONFIG.youtube.scopes.join(' '),
+    client_id:              CONFIG.youtube.clientId,
+    redirect_uri:           redirectUri,
+    response_type:          'token',
+    scope:                  CONFIG.youtube.scopes.join(' '),
     include_granted_scopes: 'true',
   });
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
@@ -238,7 +243,7 @@ function handleOAuthRedirect() {
   const hash = window.location.hash;
   if (!hash || hash.length < 2) return;
   const params = new URLSearchParams(hash.slice(1));
-  const token = params.get('access_token');
+  const token  = params.get('access_token');
   if (!token) return;
   localStorage.setItem('yt_access_token', token);
   STATE.ytConnected = true;
@@ -265,7 +270,7 @@ async function fetchYouTubeStats(token) {
     } else {
       showToast('Aucune chaîne YouTube trouvée sur ce compte', 'warn');
     }
-  } catch(e) {
+  } catch (e) {
     showToast('Erreur chargement YouTube', 'error');
     console.error(e);
   }
@@ -273,15 +278,14 @@ async function fetchYouTubeStats(token) {
 
 // ── LAUNCH MODAL ───────────────────────────────────────────
 function openLaunch() {
-  CONFIG.gemini.apiKey       = localStorage.getItem('gemini_api_key') || '';
-  CONFIG.unrealSpeech.apiKey = localStorage.getItem('unrealspeech_api_key') || '';
-  CONFIG.youtube.clientId    = localStorage.getItem('yt_client_id') || '';
+  CONFIG.gemini.apiKey        = localStorage.getItem('gemini_api_key')        || '';
+  CONFIG.unrealSpeech.apiKey  = localStorage.getItem('unrealspeech_api_key')  || '';
+  CONFIG.youtube.clientId     = localStorage.getItem('yt_client_id')          || '';
 
-  // Pollinations n'a pas besoin de clé
   const missing = [];
-  if (!CONFIG.gemini.apiKey)      missing.push('Gemini');
+  if (!CONFIG.gemini.apiKey)       missing.push('Gemini');
   if (!CONFIG.unrealSpeech.apiKey) missing.push('Unreal Speech');
-  if (!CONFIG.youtube.clientId)   missing.push('YouTube');
+  if (!CONFIG.youtube.clientId)    missing.push('YouTube');
 
   if (missing.length > 0) {
     showToast(`Configure d'abord : ${missing.join(', ')}`, 'warn');
@@ -301,7 +305,7 @@ async function launchPipeline() {
   const topic    = document.getElementById('video-topic').value.trim();
   const voice    = document.getElementById('voice-style').value;
   const duration = document.getElementById('video-duration').value;
-  const tags     = document.getElementById('video-tags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  const tags     = document.getElementById('video-tags').value.split(',').map(t => t.trim()).filter(Boolean);
 
   if (!topic) { showToast('Saisis un sujet pour la vidéo', 'warn'); return; }
   if (STATE.pipelineRunning) { showToast('Un pipeline est déjà en cours', 'warn'); return; }
@@ -311,40 +315,35 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
+  const run   = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
 
   try {
-    // ÉTAPE 1 — Script
+    // ÉTAPE 1 — Script Gemini
     const script = await generateScript(topic, tags, duration);
-    updateRun(run, 'idea', 'done', `"${script.title.slice(0,40)}…"`);
-    updateRun(run, 'voice', 'running', 'Unreal Speech en cours…');
+    updateRun(run, 'idea',   'done',    `"${script.title.slice(0, 40)}…"`);
+    updateRun(run, 'voice',  'running', 'Unreal Speech en cours…');
 
-    // ÉTAPE 2 — Voix
+    // ÉTAPE 2 — Voix (accent FR amélioré via server.js)
     const audioUrl = await generateVoice(script.narration, voice);
-    updateRun(run, 'voice', 'done', 'Audio généré ✓');
-    updateRun(run, 'images', 'running', '0/4 images…');
+    updateRun(run, 'voice',  'done',    'Audio généré ✓');
+    updateRun(run, 'images', 'running', 'Recherche Reddit en cours…');
 
-    // ÉTAPE 3 — Images (URLs Pollinations — pas de base64 !)
-    const imageUrls = await generateImageUrls(script.imagePrompts, run);
-    updateRun(run, 'images', 'done', `${imageUrls.length} images générées`);
-    updateRun(run, 'edit', 'running', 'Assemblage ffmpeg + upload YouTube…');
+    // ÉTAPE 3 — Images Reddit (via backend)
+    const imageUrls = await fetchRedditImages(topic, run);
+    updateRun(run, 'images', 'done',    `${imageUrls.length} images Reddit trouvées`);
+    updateRun(run, 'edit',   'running', 'Assemblage ffmpeg + upload YouTube…');
 
-    // ÉTAPES 4 & 5 — Assemblage + Publication (tout côté serveur)
+    // ÉTAPES 4 & 5 — Assemblage + Publication
     const ytToken = localStorage.getItem('yt_access_token');
+    if (!ytToken) throw new Error('Token YouTube manquant — reconnecte-toi');
 
     const assembleResp = await fetch(`${BACKEND}/assemble-and-publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        imageUrls,  // ← URLs simples, pas de base64
-        audioUrl,
-        script,
-        tags,
-        ytToken,
-      }),
+      body: JSON.stringify({ imageUrls, audioUrl, script, tags, ytToken }),
     });
 
     if (!assembleResp.ok) {
@@ -353,18 +352,18 @@ async function launchPipeline() {
     }
 
     const assembleData = await assembleResp.json();
-    updateRun(run, 'edit', 'done', 'Vidéo MP4 assemblée ✓');
+    updateRun(run, 'edit',    'done', 'Vidéo MP4 assemblée ✓');
     updateRun(run, 'publish', 'done', `youtu.be/${assembleData.youtubeId}`);
 
     const videoEntry = {
-      id: runId,
-      title: script.title,
+      id:          runId,
+      title:       script.title,
       description: script.description,
-      date: new Date().toISOString(),
-      status: 'published',
-      youtubeId: assembleData.youtubeId,
-      views: 0,
-      cost: 0,
+      date:        new Date().toISOString(),
+      status:      'published',
+      youtubeId:   assembleData.youtubeId,
+      views:       0,
+      cost:        0,
     };
     STATE.videos.unshift(videoEntry);
     saveState();
@@ -372,7 +371,7 @@ async function launchPipeline() {
     renderKPIs();
     showToast(`✓ Short publié : "${script.title}"`, 'success');
 
-  } catch(err) {
+  } catch (err) {
     const runningStep = PIPELINE_STEPS_DEF.find(s => run[s.id] === 'running');
     if (runningStep) updateRun(run, runningStep.id, 'error', err.message);
     showToast(`Erreur : ${err.message}`, 'error');
@@ -383,10 +382,10 @@ async function launchPipeline() {
 }
 
 function updateRun(run, step, status, detail) {
-  run[step] = status;
-  run[step+'_detail'] = detail;
-  run[step+'_time'] = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-  STATE.currentRun = run;
+  run[step]              = status;
+  run[step + '_detail']  = detail;
+  run[step + '_time']    = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  STATE.currentRun       = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
 }
@@ -405,7 +404,8 @@ async function generateScript(topic, tags, duration) {
   }
   const data = await resp.json();
   STATE.credits.gemini.used += 1;
-  saveState(); renderCredits();
+  saveState();
+  renderCredits();
   return data.script;
 }
 
@@ -421,31 +421,34 @@ async function generateVoice(text, voiceName) {
   }
   const data = await resp.json();
   STATE.credits.unrealSpeech.used += text.length;
-  saveState(); renderCredits();
+  saveState();
+  renderCredits();
   return data.audioUrl;
 }
 
-// Génère des URLs Pollinations directement — aucun appel au backend, aucun base64
-async function generateImageUrls(prompts, run) {
-  const urls = [];
-  const total = Math.min(prompts.length, 4);
+// Récupère les images Reddit via le backend (plus de Pollinations)
+async function fetchRedditImages(topic, run) {
+  updateRun(run, 'images', 'running', 'Connexion Reddit…');
 
-  for (let i = 0; i < total; i++) {
-    updateRun(run, 'images', 'running', `${i}/${total} images…`);
+  const resp = await fetch(`${BACKEND}/fetch-reddit-images`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ topic, count: 4 }),
+  });
 
-    const encodedPrompt = encodeURIComponent(
-      `${prompts[i]}, vertical 9:16, cinematic, high quality, 4k`
-    );
-    // URL Pollinations directe — le serveur la télécharge lui-même
-    const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=768&height=1344&nologo=true&enhance=true&seed=${Date.now()+i}`;
-    urls.push(url);
-
-    // Délai pour éviter le rate limit
-    await new Promise(r => setTimeout(r, 2000));
+  if (!resp.ok) {
+    const e = await resp.json().catch(() => ({}));
+    throw new Error(`Reddit images : ${e.error || resp.status}`);
   }
 
-  STATE.credits.pollinations.used += total;
-  saveState(); renderCredits();
+  const data = await resp.json();
+  const urls = data.imageUrls || [];
+
+  STATE.credits.reddit.used += urls.length;
+  saveState();
+  renderCredits();
+
+  updateRun(run, 'images', 'running', `${urls.length}/4 images trouvées…`);
   return urls;
 }
 
@@ -487,10 +490,10 @@ function showToast(msg, type = 'info') {
     toastContainer.className = 'toast-container';
     document.body.appendChild(toastContainer);
   }
-  const icons = { success:'✓', warn:'⚠', error:'✕', info:'ℹ' };
+  const icons = { success: '✓', warn: '⚠', error: '✕', info: 'ℹ' };
   const t = document.createElement('div');
   t.className = `toast ${type}`;
-  t.innerHTML = `<span style="color:var(--${type==='info'?'info':type==='success'?'accent':type==='warn'?'warn':'danger'})">${icons[type]}</span> ${msg}`;
+  t.innerHTML = `<span style="color:var(--${type === 'info' ? 'info' : type === 'success' ? 'accent' : type === 'warn' ? 'warn' : 'danger'})">${icons[type]}</span> ${msg}`;
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 4000);
 }
