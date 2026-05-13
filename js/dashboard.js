@@ -1,6 +1,6 @@
 // ============================================================
-//  DASHBOARD — AutoTube v12
-//  Gemini 2.5 Flash + Unreal Speech + Reddit Images + YouTube
+//  DASHBOARD — AutoTube v14
+//  Gemini 2.5 Flash + ElevenLabs + Reddit Images + YouTube
 // ============================================================
 
 const BACKEND = 'https://server-f28i.onrender.com';
@@ -9,14 +9,14 @@ const BACKEND = 'https://server-f28i.onrender.com';
 const STATE = {
   videos: JSON.parse(localStorage.getItem('autotube_videos') || '[]'),
   credits: {
-    gemini:       { used: 0, total: 1500,   unit: 'requêtes' },
-    unrealSpeech: { used: 0, total: 250000, unit: 'chars' },
-    reddit:       { used: 0, total: 99999,  unit: 'images' },
+    gemini:      { used: 0, total: 1500,  unit: 'requêtes' },
+    elevenlabs:  { used: 0, total: 10000, unit: 'chars' },
+    reddit:      { used: 0, total: 99999, unit: 'images' },
   },
   ytConnected: !!localStorage.getItem('yt_access_token'),
-  ytData: JSON.parse(localStorage.getItem('yt_data') || 'null'),
+  ytData:      JSON.parse(localStorage.getItem('yt_data') || 'null'),
   pipelineRunning: false,
-  currentRun: JSON.parse(localStorage.getItem('current_run') || 'null'),
+  currentRun:  JSON.parse(localStorage.getItem('current_run') || 'null'),
 };
 
 function saveState() {
@@ -29,7 +29,7 @@ handleOAuthRedirect();
 
 document.addEventListener('DOMContentLoaded', () => {
   const saved = JSON.parse(localStorage.getItem('autotube_credits') || 'null');
-  if (saved && saved.gemini && saved.unrealSpeech) {
+  if (saved && saved.gemini && saved.elevenlabs) {
     STATE.credits = { ...STATE.credits, ...saved };
   }
   renderKPIs();
@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderVideos();
   renderYouTube();
   checkConfigAlerts();
+  refreshElevenLabsQuota();
 });
 
 // ── KPIs ───────────────────────────────────────────────────
@@ -79,16 +80,16 @@ function renderKPIs() {
 // ── CRÉDITS ────────────────────────────────────────────────
 function renderCredits() {
   const labels = {
-    gemini:       { name: 'Gemini API',    icon: '◆' },
-    unrealSpeech: { name: 'Unreal Speech', icon: '◎' },
-    reddit:       { name: 'Reddit Images', icon: '◈' },
+    gemini:     { name: 'Gemini API',     icon: '◆' },
+    elevenlabs: { name: 'ElevenLabs TTS', icon: '◎' },
+    reddit:     { name: 'Reddit Images',  icon: '◈' },
   };
 
   const html = Object.entries(labels).map(([key, label]) => {
-    const c   = STATE.credits[key] || { used: 0, total: 1, unit: '' };
-    const pct = Math.max(0, 100 - (c.used / c.total * 100));
-    const cls = pct < CONFIG.alerts.dangerThreshold ? 'danger'
-              : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
+    const c        = STATE.credits[key] || { used: 0, total: 1, unit: '' };
+    const pct      = Math.max(0, 100 - (c.used / c.total * 100));
+    const cls      = pct < CONFIG.alerts.dangerThreshold ? 'danger'
+                   : pct < CONFIG.alerts.warnThreshold   ? 'warn' : '';
     const isReddit = key === 'reddit';
 
     return `<div class="credit-item">
@@ -100,7 +101,9 @@ function renderCredits() {
         <div class="credit-fill ${cls}" style="width:${isReddit ? 100 : pct}%"></div>
       </div>
       <div style="font-size:11px;color:var(--text3);margin-top:4px">
-        ${isReddit ? 'Images réelles · API publique' : `${(c.total - c.used).toLocaleString()} ${c.unit} restant`}
+        ${isReddit
+          ? 'Images réelles · API publique'
+          : `${(c.total - c.used).toLocaleString()} ${c.unit} restant`}
       </div>
     </div>`;
   }).join('');
@@ -110,16 +113,32 @@ function renderCredits() {
 
 async function refreshCredits() {
   showToast('Actualisation des crédits…', 'info');
+  await refreshElevenLabsQuota();
   saveState();
   renderCredits();
   renderKPIs();
   showToast('Crédits actualisés ✓', 'success');
 }
 
+async function refreshElevenLabsQuota() {
+  try {
+    const resp = await fetch(`${BACKEND}/elevenlabs-quota`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    STATE.credits.elevenlabs.used  = data.used  || 0;
+    STATE.credits.elevenlabs.total = data.total || 10000;
+    saveState();
+    renderCredits();
+    renderKPIs();
+  } catch (e) {
+    console.warn('Quota ElevenLabs indisponible');
+  }
+}
+
 // ── PIPELINE STEPS ─────────────────────────────────────────
 const PIPELINE_STEPS_DEF = [
   { id: 'idea',    name: 'Génération du script',    icon: '◆', detail: 'Gemini 2.5 Flash via Render' },
-  { id: 'voice',   name: 'Synthèse vocale',          icon: '◎', detail: 'Unreal Speech — accent FR' },
+  { id: 'voice',   name: 'Synthèse vocale',          icon: '◎', detail: 'ElevenLabs — voix française native' },
   { id: 'images',  name: 'Recherche images Reddit',  icon: '◈', detail: 'API publique Reddit — gratuit' },
   { id: 'edit',    name: 'Assemblage + Publication',  icon: '▦', detail: 'ffmpeg Ken Burns + YouTube API' },
   { id: 'publish', name: 'Vidéo publiée',            icon: '▶', detail: 'YouTube Shorts' },
@@ -278,14 +297,14 @@ async function fetchYouTubeStats(token) {
 
 // ── LAUNCH MODAL ───────────────────────────────────────────
 function openLaunch() {
-  CONFIG.gemini.apiKey        = localStorage.getItem('gemini_api_key')        || '';
-  CONFIG.unrealSpeech.apiKey  = localStorage.getItem('unrealspeech_api_key')  || '';
-  CONFIG.youtube.clientId     = localStorage.getItem('yt_client_id')          || '';
+  CONFIG.gemini.apiKey      = localStorage.getItem('gemini_api_key')      || '';
+  CONFIG.elevenlabs         = localStorage.getItem('elevenlabs_api_key')  || '';
+  CONFIG.youtube.clientId   = localStorage.getItem('yt_client_id')        || '';
 
   const missing = [];
-  if (!CONFIG.gemini.apiKey)       missing.push('Gemini');
-  if (!CONFIG.unrealSpeech.apiKey) missing.push('Unreal Speech');
-  if (!CONFIG.youtube.clientId)    missing.push('YouTube');
+  if (!CONFIG.gemini.apiKey)    missing.push('Gemini');
+  if (!CONFIG.elevenlabs)       missing.push('ElevenLabs');
+  if (!CONFIG.youtube.clientId) missing.push('YouTube');
 
   if (missing.length > 0) {
     showToast(`Configure d'abord : ${missing.join(', ')}`, 'warn');
@@ -303,7 +322,6 @@ function closeLaunch(e) {
 
 async function launchPipeline() {
   const topic    = document.getElementById('video-topic').value.trim();
-  const voice    = document.getElementById('voice-style').value;
   const duration = document.getElementById('video-duration').value;
   const tags     = document.getElementById('video-tags').value.split(',').map(t => t.trim()).filter(Boolean);
 
@@ -315,7 +333,7 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run   = { id: runId, topic, voice, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
+  const run   = { id: runId, topic, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
@@ -324,14 +342,14 @@ async function launchPipeline() {
     // ÉTAPE 1 — Script Gemini
     const script = await generateScript(topic, tags, duration);
     updateRun(run, 'idea',   'done',    `"${script.title.slice(0, 40)}…"`);
-    updateRun(run, 'voice',  'running', 'Unreal Speech en cours…');
+    updateRun(run, 'voice',  'running', 'ElevenLabs génère la voix…');
 
-    // ÉTAPE 2 — Voix (accent FR amélioré via server.js)
-    const audioUrl = await generateVoice(script.narration, voice);
-    updateRun(run, 'voice',  'done',    'Audio généré ✓');
+    // ÉTAPE 2 — Voix ElevenLabs
+    const audioBase64 = await generateVoice(script.narration);
+    updateRun(run, 'voice',  'done',    'Voix française générée ✓');
     updateRun(run, 'images', 'running', 'Recherche Reddit en cours…');
 
-    // ÉTAPE 3 — Images Reddit (via backend)
+    // ÉTAPE 3 — Images Reddit
     const imageUrls = await fetchRedditImages(topic, run);
     updateRun(run, 'images', 'done',    `${imageUrls.length} images Reddit trouvées`);
     updateRun(run, 'edit',   'running', 'Assemblage ffmpeg + upload YouTube…');
@@ -343,7 +361,7 @@ async function launchPipeline() {
     const assembleResp = await fetch(`${BACKEND}/assemble-and-publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrls, audioUrl, script, tags, ytToken }),
+      body: JSON.stringify({ imageUrls, audioBase64, script, tags, ytToken }),
     });
 
     if (!assembleResp.ok) {
@@ -369,6 +387,7 @@ async function launchPipeline() {
     saveState();
     renderVideos();
     renderKPIs();
+    refreshElevenLabsQuota();
     showToast(`✓ Short publié : "${script.title}"`, 'success');
 
   } catch (err) {
@@ -382,10 +401,10 @@ async function launchPipeline() {
 }
 
 function updateRun(run, step, status, detail) {
-  run[step]              = status;
-  run[step + '_detail']  = detail;
-  run[step + '_time']    = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  STATE.currentRun       = run;
+  run[step]             = status;
+  run[step + '_detail'] = detail;
+  run[step + '_time']   = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  STATE.currentRun      = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
 }
@@ -409,52 +428,47 @@ async function generateScript(topic, tags, duration) {
   return data.script;
 }
 
-async function generateVoice(text, voiceName) {
+async function generateVoice(text) {
+  const elevenKey = localStorage.getItem('elevenlabs_api_key') || '';
   const resp = await fetch(`${BACKEND}/generate-voice`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, voiceId: voiceName, apiKey: CONFIG.unrealSpeech.apiKey }),
+    body: JSON.stringify({ text, apiKey: elevenKey }),
   });
   if (!resp.ok) {
     const e = await resp.json().catch(() => ({}));
     throw new Error(`Voix : ${e.error || resp.status}`);
   }
   const data = await resp.json();
-  STATE.credits.unrealSpeech.used += text.length;
+  STATE.credits.elevenlabs.used += text.length;
   saveState();
   renderCredits();
-  return data.audioUrl;
+  return data.audioBase64;
 }
 
-// Récupère les images Reddit via le backend (plus de Pollinations)
 async function fetchRedditImages(topic, run) {
   updateRun(run, 'images', 'running', 'Connexion Reddit…');
-
   const resp = await fetch(`${BACKEND}/fetch-reddit-images`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ topic, count: 4 }),
   });
-
   if (!resp.ok) {
     const e = await resp.json().catch(() => ({}));
     throw new Error(`Reddit images : ${e.error || resp.status}`);
   }
-
   const data = await resp.json();
   const urls = data.imageUrls || [];
-
   STATE.credits.reddit.used += urls.length;
   saveState();
   renderCredits();
-
   updateRun(run, 'images', 'running', `${urls.length}/4 images trouvées…`);
   return urls;
 }
 
 // ── ALERTES ────────────────────────────────────────────────
 function checkCreditAlerts() {
-  ['gemini', 'unrealSpeech'].forEach(key => {
+  ['gemini', 'elevenlabs'].forEach(key => {
     const c = STATE.credits[key];
     if (!c) return;
     const pct = 100 - (c.used / c.total * 100);
@@ -468,9 +482,9 @@ function checkCreditAlerts() {
 
 function checkConfigAlerts() {
   const missing = [];
-  if (!localStorage.getItem('gemini_api_key'))       missing.push('Gemini');
-  if (!localStorage.getItem('unrealspeech_api_key')) missing.push('Unreal Speech');
-  if (!localStorage.getItem('yt_client_id'))         missing.push('YouTube');
+  if (!localStorage.getItem('gemini_api_key'))     missing.push('Gemini');
+  if (!localStorage.getItem('elevenlabs_api_key')) missing.push('ElevenLabs');
+  if (!localStorage.getItem('yt_client_id'))       missing.push('YouTube');
   if (missing.length > 0) {
     showToast(`Clés manquantes : ${missing.join(', ')} → va dans Config`, 'warn');
   }
