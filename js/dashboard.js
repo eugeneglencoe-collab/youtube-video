@@ -321,6 +321,8 @@ function closeLaunch(e) {
 }
 
 async function launchPipeline() {
+  const modeElement = document.querySelector('input[name="video-mode"]:checked');
+  const mode = modeElement ? modeElement.value : '1';
   const topic    = document.getElementById('video-topic').value.trim();
   const duration = document.getElementById('video-duration').value;
   const tags     = document.getElementById('video-tags').value.split(',').map(t => t.trim()).filter(Boolean);
@@ -333,35 +335,56 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run   = { id: runId, topic, duration, tags, idea: 'running', idea_detail: 'Gemini génère le script…' };
+  const run   = { id: runId, topic, duration, tags, idea: 'running', idea_detail: 'Recherche en cours…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
 
   try {
-    // ÉTAPE 1 — Script Gemini
-    const script = await generateScript(topic, tags, duration);
-    updateRun(run, 'idea',   'done',    `"${script.title.slice(0, 40)}…"`);
-    updateRun(run, 'voice',  'running', 'ElevenLabs génère la voix…');
+    let script, imageUrls, videoUrl;
+    let actualTopic = topic;
 
-    // ÉTAPE 2 — Voix ElevenLabs
+    if (mode === '2') {
+      updateRun(run, 'images', 'running', 'Recherche de vidéo Reddit...');
+      const vidResp = await fetch(`${BACKEND}/fetch-reddit-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic }),
+      });
+      if (!vidResp.ok) throw new Error('Vidéo Reddit non trouvée');
+      const vidData = await vidResp.json();
+      videoUrl = vidData.videoUrl;
+      actualTopic = vidData.title; // Utiliser le titre de la vidéo Reddit pour le script
+      updateRun(run, 'images', 'done', 'Vidéo trouvée !');
+    }
+
+    // ÉTAPE 1 — Script Gemini
+    updateRun(run, 'idea', 'running', 'Gemini génère le script…');
+    const customPrompt = localStorage.getItem('optimized_prompt') || '';
+    script = await generateScript(actualTopic, tags, duration, customPrompt, mode);
+    updateRun(run, 'idea',   'done',    `"${script.title.slice(0, 40)}…"`);
+    
+    // ÉTAPE 2 — Voix EdgeTTS
+    updateRun(run, 'voice',  'running', 'Synthèse vocale en cours…');
     const audioBase64 = await generateVoice(script.narration);
     updateRun(run, 'voice',  'done',    'Voix française générée ✓');
-    updateRun(run, 'images', 'running', 'Recherche Reddit en cours…');
-
-    // ÉTAPE 3 — Images Reddit
-    const imageUrls = await fetchRedditImages(topic, run);
-    updateRun(run, 'images', 'done',    `${imageUrls.length} images Reddit trouvées`);
-    updateRun(run, 'edit',   'running', 'Assemblage ffmpeg + upload YouTube…');
+    
+    if (mode === '1') {
+      // ÉTAPE 3 — Images Reddit (Mode 1 uniquement)
+      updateRun(run, 'images', 'running', 'Recherche Reddit en cours…');
+      imageUrls = await fetchRedditImages(topic, run);
+      updateRun(run, 'images', 'done',    `${imageUrls.length} images Reddit trouvées`);
+    }
 
     // ÉTAPES 4 & 5 — Assemblage + Publication
+    updateRun(run, 'edit',   'running', 'Assemblage ffmpeg + upload YouTube…');
     const ytToken = localStorage.getItem('yt_access_token');
     if (!ytToken) throw new Error('Token YouTube manquant — reconnecte-toi');
 
     const assembleResp = await fetch(`${BACKEND}/assemble-and-publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrls, audioBase64, script, tags, ytToken }),
+      body: JSON.stringify({ imageUrls, videoUrl, audioBase64, script, tags, ytToken }),
     });
 
     if (!assembleResp.ok) {
@@ -411,11 +434,11 @@ function updateRun(run, step, status, detail) {
 
 // ── API CALLS ──────────────────────────────────────────────
 
-async function generateScript(topic, tags, duration) {
+async function generateScript(topic, tags, duration, customPrompt, mode) {
   const resp = await fetch(`${BACKEND}/generate-script`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ topic, tags, duration, apiKey: CONFIG.gemini.apiKey }),
+    body: JSON.stringify({ topic, tags, duration, apiKey: CONFIG.gemini.apiKey, customPrompt, mode }),
   });
   if (!resp.ok) {
     const e = await resp.json().catch(() => ({}));
