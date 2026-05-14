@@ -335,7 +335,7 @@ async function launchPipeline() {
   showToast('Pipeline lancé ! Suis l\'avancement ci-dessous…', 'success');
 
   const runId = Date.now().toString();
-  const run   = { id: runId, topic, duration, tags, idea: 'running', idea_detail: 'Recherche en cours…' };
+  const run   = { id: runId, topic, duration, tags, idea: 'pending', idea_detail: 'En attente…' };
   STATE.currentRun = run;
   localStorage.setItem('current_run', JSON.stringify(run));
   renderPipelineSteps(run);
